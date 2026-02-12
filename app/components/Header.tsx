@@ -37,9 +37,9 @@ export default function Header() {
 
   return (
     <header className="border-b border-gray-200 bg-white">
-      <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 flex items-center justify-between">
+      <div className="max-w-4xl mx-auto px-4 py-4 sm:px-6 flex items-center justify-between">
         <div>
-          <Link href="/" className="text-lg font-semibold text-gray-900 hover:text-gray-700">
+          <Link href="/" className="text-3xl font-bold text-gray-900 hover:text-gray-700">
             UK Profit Calculator
           </Link>
         </div>
@@ -48,7 +48,7 @@ export default function Header() {
         <div>
           <button
             onClick={handleLogin}
-            className="text-sm font-medium text-gray-900 hover:text-gray-600 transition cursor-pointer"
+            className="text-sm font-medium text-gray-900 hover:text-gray-600 transition cursor-pointer rounded-md border border-gray-300 px-3 py-1.5"
           >
             Log in
           </button>

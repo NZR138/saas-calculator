@@ -64,10 +64,7 @@ export default function CalculatorCard() {
       {/* ================= LEFT COLUMN ================= */}
       <div>
         {/* TOP CONTROLS */}
-        <div className="flex items-center justify-between mb-2">
-          <h1 className={`font-semibold text-gray-900 ${!compact ? "text-3xl" : "text-base"}`}>
-            UK Profit Calculator
-          </h1>
+        <div className="flex items-center justify-end mb-2">
           <div className="flex items-center gap-2">
             <button
               type="button"
