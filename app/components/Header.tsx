@@ -48,7 +48,7 @@ export default function Header() {
         <div>
           <button
             onClick={handleLogin}
-            className="text-sm font-medium text-gray-900 hover:text-gray-600 transition cursor-pointer rounded-md border border-gray-300 px-3 py-1.5"
+            className="text-sm font-medium text-gray-900 border border-gray-300 px-3 py-1.5 rounded-md hover:bg-gray-50 transition cursor-pointer"
           >
             Log in
           </button>
