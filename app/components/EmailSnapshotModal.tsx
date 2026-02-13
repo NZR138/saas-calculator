@@ -116,13 +116,13 @@ export default function EmailSnapshotModal({ snapshot, onClose }: Props) {
               <span className="font-medium">But mind the hidden costs:</span>
               <ul className="mt-1 ml-6 list-disc text-sm text-gray-600">
                 <li>
-                  Corporation Tax: ~{formatMoney(Math.max(0, snapshot.profit * 0.19))} / month
+                  Platform fees: ~{formatMoney(Math.max(0, snapshot.revenue * 0.12))} / month
                 </li>
                 <li>
-                  Employer NI: ~{formatMoney(Math.max(0, snapshot.revenue * 0.138))} / month
+                  Shipping and fulfillment: ~{formatMoney(Math.max(0, snapshot.revenue * 0.06))} / month
                 </li>
                 <li>
-                  Payment fees: ~{formatMoney(Math.max(0, snapshot.revenue * 0.02))} / month
+                  Payment processing: ~{formatMoney(Math.max(0, snapshot.revenue * 0.02))} / month
                 </li>
               </ul>
             </div>
