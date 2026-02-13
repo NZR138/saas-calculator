@@ -58,13 +58,23 @@ export default function CalculatorCard() {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
       {/* ================= LEFT COLUMN ================= */}
-      <div className="space-y-4">
+      <div className="space-y-4 max-w-[680px]">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
-            UK E-commerce Profit Calculator
-          </h1>
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-2xl font-semibold text-gray-900">
+              UK Profit Calculator
+            </h1>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="border border-gray-200 rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-900 shadow-sm"
+              >
+                E-commerce
+              </button>
+            </div>
+          </div>
           <p className="mt-1 text-sm text-gray-500">
             Calculate your real profit after VAT, ads, shipping and product costs.
           </p>
@@ -177,7 +187,7 @@ export default function CalculatorCard() {
       </div>
 
       {/* ================= RIGHT COLUMN ================= */}
-      <div className="self-start sticky top-4">
+      <div className="self-start sticky top-4 max-w-[520px] w-full md:justify-self-end">
         <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Your Results</h2>

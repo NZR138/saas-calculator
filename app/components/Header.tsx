@@ -14,7 +14,7 @@ export default function Header() {
       <div className="max-w-4xl mx-auto px-4 py-4 sm:px-6 flex items-center justify-between">
         <div>
           <Link href="/" className="text-3xl font-bold text-gray-900 hover:text-gray-700">
-            UK E-commerce Profit Calculator
+            UK Profit Calculator
           </Link>
         </div>
 
