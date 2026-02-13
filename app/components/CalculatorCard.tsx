@@ -219,6 +219,33 @@ export default function CalculatorCard() {
               </button>
             </div>
           </div>
+
+          <div className="border-t border-gray-100 pt-4 text-sm text-gray-600">
+            <p className="font-semibold text-gray-700">How to interpret your results</p>
+            <div className="mt-2 space-y-2">
+              <div>
+                <p className="font-medium text-gray-700">Margin guidance</p>
+                <p>
+                  Healthy UK e-commerce margin typically ranges between 20%–40% depending on niche and returns.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-700">ROAS guidance</p>
+                <p>
+                  ROAS above 2.5–3.0 is generally considered sustainable for paid traffic.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-700">Hidden costs reminder</p>
+                <ul className="mt-1 list-disc pl-4 space-y-1">
+                  <li>Marketplace/platform fees</li>
+                  <li>Returns & refunds</li>
+                  <li>Packaging & inserts</li>
+                  <li>Customer support time</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
