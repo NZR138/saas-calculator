@@ -24,6 +24,10 @@ export default function CalculatorCard() {
 
   const [shippingCost, setShippingCost] = useState(0);
   const [processingFee, setProcessingFee] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [copyMessage, setCopyMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Feedback protection: one vote per browser session
   const [voted, setVoted] = useState(false);
@@ -36,6 +40,15 @@ export default function CalculatorCard() {
       }
     } catch {
       // ignore localStorage errors
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const authUser = localStorage.getItem("auth_user");
+      setIsLoggedIn(Boolean(authUser));
+    } catch {
+      setIsLoggedIn(false);
     }
   }, []);
 
@@ -54,6 +67,79 @@ export default function CalculatorCard() {
       window.plausible?.("feedback_yes");
     } else {
       window.plausible?.("feedback_no");
+    }
+  };
+
+  const buildResultsText = () => {
+    const roasText = roas !== null ? roas.toFixed(2) : "N/A";
+    return [
+      "UK Profit Calculator Results",
+      "",
+      `Revenue: £${revenue.toFixed(2)}`,
+      `Total Costs: £${totalCosts.toFixed(2)}`,
+      `VAT: £${vatAmount.toFixed(2)}`,
+      `Net Profit: £${profit.toFixed(2)}`,
+      `Margin: ${margin.toFixed(1)}%`,
+      `ROAS: ${roasText}`,
+    ].join("\n");
+  };
+
+  const handleCopyResults = async () => {
+    setCopyMessage("");
+    try {
+      await navigator.clipboard.writeText(buildResultsText());
+      setCopyMessage("Results copied to clipboard.");
+    } catch {
+      setCopyMessage("Unable to copy results.");
+    }
+  };
+
+  const handleSaveSnapshot = async () => {
+    if (isSaving) return;
+    setSaveMessage("");
+    setIsSaving(true);
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    try {
+      const userId = localStorage.getItem("auth_user");
+      if (!supabaseUrl || !supabaseKey || !userId) {
+        setSaveMessage("Unable to save snapshot.");
+        return;
+      }
+
+      const payload = {
+        user_id: userId,
+        revenue,
+        total_costs: totalCosts,
+        vat: vatAmount,
+        net_profit: profit,
+        margin,
+        roas,
+      };
+
+      const response = await fetch(`${supabaseUrl}/rest/v1/saved_calculations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        setSaveMessage("Unable to save snapshot.");
+        return;
+      }
+
+      setSaveMessage("Snapshot saved.");
+    } catch {
+      setSaveMessage("Unable to save snapshot.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -220,7 +306,42 @@ export default function CalculatorCard() {
             </div>
           </div>
 
-          <div className="border-t border-gray-100 pt-4 text-sm text-gray-600">
+          <div className="border-t border-gray-100 pt-4">
+            {isLoggedIn ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyResults}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-gray-50 transition cursor-pointer"
+                  >
+                    Copy Results
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveSnapshot}
+                    disabled={isSaving}
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold text-white transition ${
+                      isSaving
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : "bg-black hover:bg-gray-800 cursor-pointer"
+                    }`}
+                  >
+                    {isSaving ? "Saving..." : "Save Snapshot"}
+                  </button>
+                </div>
+                {(copyMessage || saveMessage) && (
+                  <p className="text-xs text-gray-500">
+                    {copyMessage || saveMessage}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">Log in to copy and save results.</p>
+            )}
+          </div>
+
+          <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
             <p className="font-semibold text-gray-700">How to interpret your results</p>
             <div className="mt-2 space-y-2">
               <div>
