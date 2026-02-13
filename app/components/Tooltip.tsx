@@ -11,13 +11,14 @@ export default function Tooltip({ content }: TooltipProps) {
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
 
+  type MsNavigator = Navigator & { msMaxTouchPoints?: number };
+
   // Detect touch device on mount
   useEffect(() => {
-    const hasTouchScreen =
-      () =>
-        (navigator.maxTouchPoints !== undefined &&
-          navigator.maxTouchPoints > 0) ||
-        (navigator as any).msMaxTouchPoints > 0;
+    const hasTouchScreen = () =>
+      (navigator.maxTouchPoints !== undefined &&
+        navigator.maxTouchPoints > 0) ||
+      ((navigator as MsNavigator).msMaxTouchPoints ?? 0) > 0;
 
     setIsTouchDevice(hasTouchScreen());
   }, []);

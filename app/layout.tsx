@@ -3,7 +3,7 @@ import Header from './components/Header';
 import type { Metadata } from 'next';
 declare global {
   interface Window {
-    plausible?: (event: string, options?: any) => void;
+    plausible?: (event: string, options?: Record<string, unknown>) => void;
   }
 }
 export const metadata: Metadata = {

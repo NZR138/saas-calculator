@@ -1,37 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
-
-type SavedSnapshot = {
-  revenue: number;
-  profit: number;
-  margin: number;
-  roas: number | null;
-  date: string;
-};
 export default function Header() {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [showAccountModal, setShowAccountModal] = useState<boolean>(false);
-  const [savedData, setSavedData] = useState<SavedSnapshot[]>([]);
-
-  useEffect(() => {
-    // Check login state from localStorage on mount
-    const authUser = localStorage.getItem("auth_user");
-    setIsLoggedIn(Boolean(authUser));
-  }, []);
-
   const handleLogin = () => {
     // Store demo user in localStorage
     localStorage.setItem("auth_user", "demo_user");
     // reload so app can pick up auth state
-    window.location.reload();
-  };
-
-  const handleLogout = () => {
-    // Remove auth_user from localStorage and reload page
-    localStorage.removeItem("auth_user");
-    setIsLoggedIn(false);
     window.location.reload();
   };
 

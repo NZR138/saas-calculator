@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/test_dRm4gr0Ua8qz6F5ekKaR200";
 
@@ -41,7 +41,7 @@ export default function WrittenBreakdownPage() {
 
         {/* What you'll get */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">What you'll get</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">What you will get</h2>
           <ul className="space-y-2 text-gray-700">
             <li className="flex items-start gap-3">
               <span className="text-lg text-black mt-0">•</span>
@@ -177,7 +177,7 @@ export default function WrittenBreakdownPage() {
                 // Persist in sessionStorage for later (post-payment update)
                 try {
                   sessionStorage.setItem("written_request_id", String(requestId));
-                } catch (e) {
+                } catch {
                   // ignore sessionStorage errors
                 }
 
@@ -216,28 +216,41 @@ export default function WrittenBreakdownPage() {
 /* Placeholder Supabase client and post-payment updater (logic-only)     */
 /* ====================================================================== */
 
+type SupabaseRow = Record<string, unknown> & { id?: string | number };
+type SupabaseResponse = { data?: SupabaseRow[] };
+type SupabaseTableClient = {
+  insert: (payload: Record<string, unknown>) => Promise<SupabaseResponse>;
+  update: (payload: Record<string, unknown>) => Promise<SupabaseResponse>;
+};
+type SupabaseClient = {
+  from: (table: string) => SupabaseTableClient;
+};
+
 // Placeholder factory — replace with real Supabase client initialization.
 // TODO: Replace this with an actual `createSupabaseClient()` implementation.
-function createSupabaseClient() {
+function createSupabaseClient(): SupabaseClient {
   return {
-    from: (table: string) => ({
-      // NOTE: These methods are placeholders returning a shape similar to
-      // Supabase client responses. Replace with real calls in production.
-      insert: async (payload: any) => {
-        // TODO: call supabase.from(table).insert(payload).select()
-        // Simulate a response structure: { data: [{ id: 'generated-id', ... }] }
-        return new Promise<{ data: any[] }>((resolve) => {
-          const fakeId = `req_${Date.now()}`;
-          resolve({ data: [{ id: fakeId, ...payload }] });
-        });
-      },
-      update: async (payload: any) => {
-        // TODO: call supabase.from(table).update(payload).match({ id: requestId })
-        return new Promise<{ data: any[] }>((resolve) => {
-          resolve({ data: [payload] });
-        });
-      },
-    }),
+    from: (table: string) => {
+      void table;
+      return {
+        // NOTE: These methods are placeholders returning a shape similar to
+        // Supabase client responses. Replace with real calls in production.
+        insert: async (payload: Record<string, unknown>): Promise<SupabaseResponse> => {
+          // TODO: call supabase.from(table).insert(payload).select()
+          // Simulate a response structure: { data: [{ id: 'generated-id', ... }] }
+          return new Promise<SupabaseResponse>((resolve) => {
+            const fakeId = `req_${Date.now()}`;
+            resolve({ data: [{ id: fakeId, ...payload }] });
+          });
+        },
+        update: async (payload: Record<string, unknown>): Promise<SupabaseResponse> => {
+          // TODO: call supabase.from(table).update(payload).match({ id: requestId })
+          return new Promise<SupabaseResponse>((resolve) => {
+            resolve({ data: [payload] });
+          });
+        },
+      };
+    },
   };
 }
 
@@ -272,7 +285,7 @@ if (typeof window !== "undefined") {
             // Mark as updated in session to avoid duplicate calls
             try {
               sessionStorage.setItem("written_request_paid", "true");
-            } catch (e) {
+            } catch {
               // ignore
             }
           } catch (e) {
@@ -282,7 +295,7 @@ if (typeof window !== "undefined") {
         })();
       }
     }
-  } catch (e) {
+  } catch {
     // ignore URL parsing/sessionStorage errors
   }
 }

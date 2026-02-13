@@ -26,16 +26,14 @@ export default function CalculatorCard() {
 
   // Feedback protection: one vote per browser session
   const [voted, setVoted] = useState(false);
-  const [votedValue, setVotedValue] = useState<string | null>(null);
 
   useEffect(() => {
     try {
       const existing = localStorage.getItem("feedback_voted");
       if (existing) {
         setVoted(true);
-        setVotedValue(existing);
       }
-    } catch (e) {
+    } catch {
       // ignore localStorage errors
     }
   }, []);
@@ -46,8 +44,7 @@ export default function CalculatorCard() {
       localStorage.setItem("feedback_voted", dir === "up" ? "up" : "down");
       localStorage.setItem("feedback_voted_at", new Date().toISOString());
       setVoted(true);
-      setVotedValue(dir === "up" ? "up" : "down");
-    } catch (e) {
+    } catch {
       // ignore localStorage errors
     }
 

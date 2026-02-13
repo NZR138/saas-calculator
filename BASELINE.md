@@ -4,6 +4,8 @@
 **Stack**: Next.js 16.1 + React 19 + TypeScript + Tailwind CSS + lucide-react  
 **Status**: MVP in development
 
+**Stability check (PowerShell-friendly)**: Run `npm run stability`
+
 ---
 
 ## Architecture Overview

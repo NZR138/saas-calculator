@@ -39,7 +39,7 @@ export default function EmailSnapshotModal({ snapshot, onClose }: Props) {
         localStorage.setItem(key, JSON.stringify(existing));
         savedRef.current = true;
       }
-    } catch (e) {
+    } catch {
       // ignore storage errors
     }
   }, [snapshot]);
@@ -65,11 +65,11 @@ export default function EmailSnapshotModal({ snapshot, onClose }: Props) {
           ✕
         </button>
         <h2 className="text-lg font-semibold pr-6">
-          Here's a clearer way to look at these numbers
+          Here is a clearer way to look at these numbers
         </h2>
 
         <p className="mt-1 text-sm text-gray-500">
-          We’ll break down what these figures mean in practice and highlight what’s worth paying attention to for a UK business.
+          We will break down what these figures mean in practice and highlight what is worth paying attention to for a UK business.
         </p>
 
         <div className="mt-3 space-y-1 text-sm">
@@ -119,7 +119,7 @@ export default function EmailSnapshotModal({ snapshot, onClose }: Props) {
                   Corporation Tax: ~{formatMoney(Math.max(0, snapshot.profit * 0.19))} / month
                 </li>
                 <li>
-                  Employer's NI: ~{formatMoney(Math.max(0, snapshot.revenue * 0.138))} / month
+                  Employer NI: ~{formatMoney(Math.max(0, snapshot.revenue * 0.138))} / month
                 </li>
                 <li>
                   Payment fees: ~{formatMoney(Math.max(0, snapshot.revenue * 0.02))} / month
