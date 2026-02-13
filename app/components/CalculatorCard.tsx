@@ -61,24 +61,9 @@ export default function CalculatorCard() {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
       {/* ================= LEFT COLUMN ================= */}
       <div className="space-y-4 max-w-[680px]">
-        <div>
-          <div className="flex items-center justify-between gap-4">
-            <h1 className="text-2xl font-semibold text-gray-900">
-              UK Profit Calculator
-            </h1>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="border border-gray-200 rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-900 shadow-sm"
-              >
-                E-commerce
-              </button>
-            </div>
-          </div>
-          <p className="mt-1 text-sm text-gray-500">
-            Calculate your real profit after VAT, ads, shipping and product costs.
-          </p>
-        </div>
+        <p className="text-sm text-gray-500">
+          Calculate your real profit after VAT, ads, shipping and product costs.
+        </p>
 
         <div className="bg-white rounded-2xl shadow-md p-6 space-y-6">
           <div className="flex items-center justify-between">
@@ -161,7 +146,7 @@ export default function CalculatorCard() {
             onClick={() => canShowSnapshot && setShowSnapshot(true)}
             className={`w-full rounded-xl py-3 text-sm font-semibold text-white transition ${
               canShowSnapshot
-                ? "bg-black hover:bg-gray-800"
+                ? "bg-black hover:bg-gray-800 hover:shadow-md active:translate-y-px active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/40 focus-visible:ring-offset-2 cursor-pointer"
                 : "bg-gray-300 cursor-not-allowed"
             }`}
           >
