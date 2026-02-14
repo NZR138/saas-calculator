@@ -1,89 +1,90 @@
 "use client";
 
-import { useEffect, useRef, useState, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import Tooltip from "./Tooltip";
 
-type NumberFieldProps = {
-  label: ReactNode; // ← ВАЖЛИВО: дозволяє span + tooltip
-  value: number;
-  onChange: (value: number) => void;
-  prefix?: string; // "£"
-  placeholder?: string;
-};
-
-// залишаємо тільки цифри + прибираємо лідуючі нулі
-function normalizeDigits(raw: string) {
-  const digitsOnly = raw.replace(/[^\d]/g, "");
-  const trimmed = digitsOnly.replace(/^0+(?=\d)/, "");
-  return trimmed;
-}
-
-export default function NumberField({
+export function NumberField({
   label,
+  tooltip,
   value,
   onChange,
   prefix,
-  placeholder,
-}: NumberFieldProps) {
+}: {
+  label: string;
+  tooltip?: string;
+  value: number;
+  onChange: (v: number) => void;
+  prefix?: string;
+}) {
   const [text, setText] = useState(String(value));
-  const isEditingRef = useRef(false);
+  const [hasEdited, setHasEdited] = useState(false);
+  const isEditingRef = useRef<boolean>(false);
 
-  // синхронізуємо value → text, якщо не редагуємо руками
   useEffect(() => {
     if (!isEditingRef.current) {
       setText(String(value));
     }
   }, [value]);
 
-  return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium text-gray-700">
-        {label}
-      </label>
+  const normalizeDigits = (raw: string): string => {
+    const digitsOnly = raw.replace(/[^\d]/g, "");
+    const trimmed = digitsOnly.replace(/^0+(?=\d)/, "");
+    return trimmed;
+  };
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const normalized = normalizeDigits(e.target.value);
+    setText(normalized === "" ? "" : normalized);
+    setHasEdited(true);
+
+    const nextNumber = normalized === "" ? 0 : Number(normalized);
+    onChange(nextNumber);
+  };
+
+  const handleBlur = () => {
+    isEditingRef.current = false;
+    const normalized = normalizeDigits(text);
+    const nextNumber = normalized === "" ? 0 : Number(normalized);
+    setText(String(nextNumber));
+    onChange(nextNumber);
+  };
+
+  const handleFocus = () => {
+    isEditingRef.current = true;
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (["e", "E", "+", "-", ".", ","].includes(e.key)) {
+      e.preventDefault();
+    }
+  };
+
+  const displayValue = !hasEdited && value === 0 ? "" : text;
+
+  return (
+    <div>
+      <div className="flex items-center gap-1 text-sm text-gray-700">
+        <span>{label}</span>
+        {tooltip && <Tooltip content={tooltip} />}
+      </div>
       <div className="relative">
         {prefix && (
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
             {prefix}
           </span>
         )}
-
         <input
           type="text"
           inputMode="numeric"
-          autoComplete="off"
-          placeholder={placeholder}
-          className={`w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 ${
+          placeholder="0"
+          value={displayValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          onFocus={handleFocus}
+          onKeyDown={handleKeyDown}
+          className={`mt-0.5 w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-300 ${
             prefix ? "pl-8" : ""
           }`}
-          value={text}
-          onFocus={() => {
-            isEditingRef.current = true;
-          }}
-          onBlur={() => {
-            isEditingRef.current = false;
-
-            // фінальна нормалізація
-            const normalized = normalizeDigits(text);
-            const nextNumber = normalized === "" ? 0 : Number(normalized);
-
-            setText(String(nextNumber));
-            onChange(nextNumber);
-          }}
-          onKeyDown={(e) => {
-            // блокуємо сміття
-            if (["e", "E", "+", "-", ".", ","].includes(e.key)) {
-              e.preventDefault();
-            }
-          }}
-          onChange={(e) => {
-            const normalized = normalizeDigits(e.target.value);
-
-            setText(normalized === "" ? "" : normalized);
-
-            // одразу оновлюємо число (щоб справа рахувалось)
-            const nextNumber = normalized === "" ? 0 : Number(normalized);
-            onChange(nextNumber);
-          }}
         />
       </div>
     </div>

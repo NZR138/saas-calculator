@@ -1,6 +1,7 @@
 import './globals.css';
-import Header from './components/Header';
 import type { Metadata } from 'next';
+import Script from 'next/script';
+import ConditionalHeader from './components/ConditionalHeader';
 declare global {
   interface Window {
     plausible?: (event: string, options?: Record<string, unknown>) => void;
@@ -11,11 +12,6 @@ export const metadata: Metadata = {
   description:
     'UK Profit Calculator helps you calculate real monthly profit after VAT, advertising spend and fixed costs. No spreadsheets, no guesswork.',
 };
-<script
-  defer
-  data-domain="yourdomain.com"
-  src="https://plausible.io/js/script.js"
-/>
 export default function RootLayout({
   children,
 }: {
@@ -24,8 +20,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
-        <Header />
+        <ConditionalHeader />
         {children}
+        <Script
+          defer
+          data-domain="yourdomain.com"
+          src="https://plausible.io/js/script.js"
+        />
       </body>
     </html>
   );

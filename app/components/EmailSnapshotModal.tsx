@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getSupabaseClient } from "@/app/lib/supabaseClient";
 
 type Snapshot = {
   revenue: number;
@@ -20,29 +21,44 @@ const formatMoney = (n: number) => `£${n.toFixed(2)}`;
 export default function EmailSnapshotModal({ snapshot, onClose }: Props) {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const savedRef = useRef<boolean>(false);
 
   useEffect(() => {
-    // Check login status from localStorage (wrapped in useEffect for SSR)
-    const authUser = localStorage.getItem("auth_user");
-    setIsLoggedIn(Boolean(authUser));
-  }, []);
+    let isMounted = true;
 
-  useEffect(() => {
-    // Save snapshot for logged-in users once per modal session
     try {
-      const user = localStorage.getItem("auth_user");
-      if (user && !savedRef.current) {
-        const key = `user_data_${user}`;
-        const existing = JSON.parse(localStorage.getItem(key) || "[]");
-        existing.push({ ...snapshot, date: new Date().toISOString() });
-        localStorage.setItem(key, JSON.stringify(existing));
-        savedRef.current = true;
-      }
+      const supabase = getSupabaseClient();
+
+      const syncUser = async () => {
+        const { data } = await supabase.auth.getUser();
+        if (isMounted) {
+          setIsLoggedIn(Boolean(data.user));
+        }
+      };
+
+      syncUser();
+
+      const { data: authListener } = supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          if (isMounted) {
+            setIsLoggedIn(Boolean(session?.user));
+          }
+        }
+      );
+
+      return () => {
+        isMounted = false;
+        authListener.subscription.unsubscribe();
+      };
     } catch {
-      // ignore storage errors
+      // Supabase not configured
+      if (isMounted) {
+        setIsLoggedIn(false);
+      }
+      return () => {
+        isMounted = false;
+      };
     }
-  }, [snapshot]);
+  }, []);
 
   const handleGetBreakdown = () => {
     if (!isLoggedIn) {

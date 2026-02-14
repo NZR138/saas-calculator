@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 
-type CalculatorValues = {
+export type CalculatorValues = {
   users: number;
   price: number;
   fixedCosts: number;
@@ -33,8 +33,7 @@ export function useCalculator() {
         const parsed = JSON.parse(stored);
         setValues(parsed);
       }
-    } catch (error) {
-      console.error("Failed to load calculator values from localStorage:", error);
+    } catch {
     }
     setIsLoaded(true);
   }, []);
@@ -49,8 +48,7 @@ export function useCalculator() {
       }
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(values));
-      } catch (error) {
-        console.error("Failed to save calculator values to localStorage:", error);
+      } catch {
       }
     }
   }, [values, isLoaded]);
@@ -68,8 +66,7 @@ export function useCalculator() {
     setValues(DEFAULT_VALUES);
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch (error) {
-      console.error("Failed to clear calculator values from localStorage:", error);
+    } catch {
     }
   };
 

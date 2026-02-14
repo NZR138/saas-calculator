@@ -17,21 +17,7 @@ export default function WrittenBreakdownPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-6 sm:px-6">
-        <div className="max-w-2xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Written Profit & Tax Breakdown
-          </h1>
-          <p className="mt-2 text-gray-600">
-            A general, educational review of your numbers — not tax advice.
-          </p>
-        </div>
-      </div>
-
-      {/* Main Content */}
       <div className="max-w-2xl mx-auto px-4 py-8 sm:px-6">
-        {/* Intro */}
         <section className="mb-8">
           <p className="text-gray-700 text-base leading-relaxed">
             This is a written profit & tax breakdown based on the figures you entered in the calculator.
@@ -39,7 +25,6 @@ export default function WrittenBreakdownPage() {
           </p>
         </section>
 
-        {/* What you'll get */}
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">What you will get</h2>
           <ul className="space-y-2 text-gray-700">
@@ -62,7 +47,6 @@ export default function WrittenBreakdownPage() {
           </ul>
         </section>
 
-        {/* Your Questions */}
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Your questions</h2>
           <p className="text-gray-600 text-sm mb-4">
@@ -90,7 +74,6 @@ export default function WrittenBreakdownPage() {
           </div>
         </section>
 
-        {/* Delivery */}
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Delivery</h2>
           <ul className="space-y-2 text-gray-700">
@@ -108,17 +91,12 @@ export default function WrittenBreakdownPage() {
             </li>
           </ul>
         </section>
-
-        
-
-        {/* Price */}
         <section className="mb-8">
           <p className="text-lg font-semibold text-gray-900">
             £39 — one-off payment. No subscription.
           </p>
         </section>
 
-        {/* Legal Disclaimer */}
         <section className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900 mb-2">Important note</h3>
           <p className="text-sm text-gray-700 leading-relaxed">
@@ -128,7 +106,6 @@ export default function WrittenBreakdownPage() {
           </p>
         </section>
 
-        {/* Terms Checkbox */}
         <section className="mb-8">
           <label className="flex items-start gap-2">
             <input
@@ -143,16 +120,12 @@ export default function WrittenBreakdownPage() {
           </label>
         </section>
 
-        {/* CTA Buttons */}
         <section className="flex gap-3">
           <button
             onClick={async () => {
-              // Create a draft request in Supabase, store request_id, then redirect to Stripe
               if (!agreedToTerms || isProcessing) return;
               setIsProcessing(true);
 
-              // Build payload from questions — email may be captured elsewhere (Stripe),
-              // attempt to read from sessionStorage if available. Keep empty string if not.
               const email = (typeof window !== "undefined" && sessionStorage.getItem("written_request_email")) || "";
 
               const payload = {
@@ -165,28 +138,16 @@ export default function WrittenBreakdownPage() {
               };
 
               try {
-                // TODO: Replace with real Supabase client. Placeholder below.
                 const supabase = createSupabaseClient();
-
-                // TODO: Insert into `written_requests` table. This is a placeholder call.
                 const insertRes = await supabase.from("written_requests").insert(payload);
-
-                // Try to read returned id; if not available, fallback to timestamp-based id
                 const requestId = insertRes?.data?.[0]?.id || `req_${Date.now()}`;
-
-                // Persist in sessionStorage for later (post-payment update)
                 try {
                   sessionStorage.setItem("written_request_id", String(requestId));
                 } catch {
-                  // ignore sessionStorage errors
                 }
-
-                // Append request_id to Stripe payment link and open in new tab
                 const url = `${STRIPE_PAYMENT_LINK}${STRIPE_PAYMENT_LINK.includes("?") ? "&" : "?"}request_id=${encodeURIComponent(String(requestId))}`;
                 window.open(url, "_blank", "noopener,noreferrer");
-              } catch (e) {
-                // swallow errors for now — TODO: add user-visible error handling if required
-                console.error("Failed to create draft request", e);
+              } catch {
               } finally {
                 setIsProcessing(false);
               }
@@ -212,10 +173,6 @@ export default function WrittenBreakdownPage() {
   );
 }
 
-/* ====================================================================== */
-/* Placeholder Supabase client and post-payment updater (logic-only)     */
-/* ====================================================================== */
-
 type SupabaseRow = Record<string, unknown> & { id?: string | number };
 type SupabaseResponse = { data?: SupabaseRow[] };
 type SupabaseTableClient = {
@@ -226,25 +183,18 @@ type SupabaseClient = {
   from: (table: string) => SupabaseTableClient;
 };
 
-// Placeholder factory — replace with real Supabase client initialization.
-// TODO: Replace this with an actual `createSupabaseClient()` implementation.
 function createSupabaseClient(): SupabaseClient {
   return {
     from: (table: string) => {
       void table;
       return {
-        // NOTE: These methods are placeholders returning a shape similar to
-        // Supabase client responses. Replace with real calls in production.
         insert: async (payload: Record<string, unknown>): Promise<SupabaseResponse> => {
-          // TODO: call supabase.from(table).insert(payload).select()
-          // Simulate a response structure: { data: [{ id: 'generated-id', ... }] }
           return new Promise<SupabaseResponse>((resolve) => {
             const fakeId = `req_${Date.now()}`;
             resolve({ data: [{ id: fakeId, ...payload }] });
           });
         },
         update: async (payload: Record<string, unknown>): Promise<SupabaseResponse> => {
-          // TODO: call supabase.from(table).update(payload).match({ id: requestId })
           return new Promise<SupabaseResponse>((resolve) => {
             resolve({ data: [payload] });
           });
@@ -254,48 +204,35 @@ function createSupabaseClient(): SupabaseClient {
   };
 }
 
-// On return from Stripe (client-side), attempt to mark the request as paid.
-// This reads `request_id` from the URL query or sessionStorage, then performs
-// a placeholder update against the `written_requests` table.
-// TODO: Replace placeholder update with real Supabase update call.
 if (typeof window !== "undefined") {
   try {
     const params = new URLSearchParams(window.location.search);
     const returnedRequestId = params.get("request_id") || sessionStorage.getItem("written_request_id");
 
     if (returnedRequestId) {
-      // Simple guard: only attempt update once per session
       const alreadyUpdated = sessionStorage.getItem("written_request_paid") === "true";
       if (!alreadyUpdated) {
         (async () => {
           try {
             const supabase = createSupabaseClient();
 
-            // Prepare update payload
             const updatePayload = {
               status: "paid",
               paid_at: new Date().toISOString(),
-              // Placeholder value for Stripe session id — replace when available
               stripe_session_id: "placeholder_stripe_session",
             };
 
-            // TODO: Replace with actual Supabase `update(...).match({ id: returnedRequestId })` call
             await supabase.from("written_requests").update(updatePayload);
 
-            // Mark as updated in session to avoid duplicate calls
             try {
               sessionStorage.setItem("written_request_paid", "true");
             } catch {
-              // ignore
             }
-          } catch (e) {
-            // swallow errors — in production, consider retry/backoff or server-side webhook
-            console.error("Failed to mark written request as paid", e);
+          } catch {
           }
         })();
       }
     }
   } catch {
-    // ignore URL parsing/sessionStorage errors
   }
 }

@@ -1,15 +1,19 @@
 "use client";
 
+import Tooltip from "./Tooltip";
+
 type ToggleVatProps = {
   value: boolean;
   onChange: (value: boolean) => void;
   label?: string;
+  tooltip?: string;
 };
 
 export default function ToggleVat({
   value,
   onChange,
   label = "VAT (20%) included",
+  tooltip,
 }: ToggleVatProps) {
   return (
     <div className="mt-2">
@@ -36,7 +40,10 @@ export default function ToggleVat({
           />
         </span>
 
-        <span className="text-sm text-gray-700">{label}</span>
+        <span className="flex items-center gap-1 text-sm text-gray-700">
+          {label}
+          {tooltip && <Tooltip content={tooltip} />}
+        </span>
       </button>
     </div>
   );
