@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import ConditionalHeader from './components/ConditionalHeader';
+import ConditionalFooter from './components/ConditionalFooter';
 declare global {
   interface Window {
     plausible?: (event: string, options?: Record<string, unknown>) => void;
@@ -22,6 +23,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
         <ConditionalHeader />
         {children}
+        <ConditionalFooter />
         <Script
           defer
           data-domain="yourdomain.com"

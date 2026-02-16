@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCalculator } from "../hooks/useCalculator";
 import { ProductSection } from "./ProductSection";
@@ -23,10 +22,7 @@ export default function CalculatorCard() {
 
   const router = useRouter();
 
-  const [shippingCost, setShippingCost] = useState(0);
-  const [processingFee, setProcessingFee] = useState(0);
-
-  const isValid = values.price > 0 && values.users > 0;
+  const isValid = values.productPrice > 0 && values.unitsSold > 0;
 
   const handleCalculate = () => {
     if (!isValid) {
@@ -63,10 +59,6 @@ export default function CalculatorCard() {
           <CostsSection
             values={values}
             setValue={setValue}
-            shippingCost={shippingCost}
-            onShippingCostChange={setShippingCost}
-            processingFee={processingFee}
-            onProcessingFeeChange={setProcessingFee}
           />
 
           <MarketingSection values={values} setValue={setValue} />
@@ -107,6 +99,18 @@ export default function CalculatorCard() {
           margin={margin}
           roas={roas}
         />
+
+        <details className="mt-4 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
+          <summary className="cursor-pointer font-medium text-gray-900">
+            How this calculator works
+          </summary>
+          <ul className="mt-3 list-disc pl-4 space-y-1">
+            <li>Revenue = Price × Units.</li>
+            <li>Costs include product, shipping, ads, payment fee, and VAT.</li>
+            <li>Results are estimates only.</li>
+            <li>This is not financial advice.</li>
+          </ul>
+        </details>
       </div>
     </div>
   );

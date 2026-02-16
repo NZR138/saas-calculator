@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import EmailSnapshotModal from "./EmailSnapshotModal";
 import { ResultItem } from "./ResultItem";
+import { useRouter } from "next/navigation";
 
 interface ResultsSectionProps {
   revenue: number;
@@ -11,8 +12,13 @@ interface ResultsSectionProps {
   vatAmount: number;
   profit: number;
   margin: number;
-  roas: number | null;
+  roas: number;
 }
+
+const toSafeNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 export function ResultsSection({
   revenue,
@@ -22,6 +28,13 @@ export function ResultsSection({
   margin,
   roas,
 }: ResultsSectionProps) {
+  const router = useRouter();
+  const safeRevenue = toSafeNumber(revenue);
+  const safeTotalCosts = toSafeNumber(totalCosts);
+  const safeVatAmount = toSafeNumber(vatAmount);
+  const safeProfit = toSafeNumber(profit);
+  const safeMargin = toSafeNumber(margin);
+  const safeRoas = toSafeNumber(roas);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveStatus, setSaveStatus] = useState<"success" | "error" | "">("");
@@ -117,13 +130,29 @@ export function ResultsSection({
 
       const payload = {
         user_id: user.id,
-        revenue,
-        total_costs: totalCosts,
-        vat: vatAmount,
-        net_profit: profit,
-        margin,
-        roas,
+        revenue: safeRevenue,
+        total_costs: safeTotalCosts,
+        vat: safeVatAmount,
+        net_profit: safeProfit,
+        margin: safeMargin,
+        roas: safeRoas,
       };
+
+      const numericPayloadValues = [
+        payload.revenue,
+        payload.total_costs,
+        payload.vat,
+        payload.net_profit,
+        payload.margin,
+        payload.roas,
+      ];
+
+      if (numericPayloadValues.some((value) => !Number.isFinite(value))) {
+        console.error("Snapshot payload contains invalid numeric values", payload);
+        setSaveStatus("error");
+        setSaveMessage("Unable to save snapshot.");
+        return;
+      }
 
       const { error } = await supabase.from("snapshots").insert([payload]);
 
@@ -150,7 +179,7 @@ export function ResultsSection({
           <h2 className="text-lg font-semibold text-gray-900 mb-2">
             Your Results
           </h2>
-          {revenue === 0 && (
+          {safeRevenue === 0 && (
             <p className="text-sm text-gray-400">Enter values to see results</p>
           )}
         </div>
@@ -158,34 +187,34 @@ export function ResultsSection({
         <div>
           <ResultItem 
             label="Revenue" 
-            value={`£${revenue.toFixed(2)}`} 
+            value={`£${safeRevenue.toFixed(2)}`} 
             tooltip="Total income from sales (units × price)"
           />
           <ResultItem 
             label="Total Costs" 
-            value={`£${totalCosts.toFixed(2)}`} 
+            value={`£${safeTotalCosts.toFixed(2)}`} 
             tooltip="Sum of product costs, shipping, fees, and ad spend"
           />
           <ResultItem 
             label="VAT" 
-            value={`£${vatAmount.toFixed(2)}`} 
+            value={`£${safeVatAmount.toFixed(2)}`} 
             tooltip="UK VAT at 20% if enabled"
           />
           <ResultItem
             label="Net Profit"
-            value={`£${profit.toFixed(2)}`}
+            value={`£${safeProfit.toFixed(2)}`}
             highlight
-            negative={profit < 0}
+            negative={safeProfit < 0}
             tooltip="Revenue minus all costs and VAT"
           />
           <ResultItem 
             label="Margin %" 
-            value={`${margin.toFixed(1)}%`} 
+            value={`${safeMargin.toFixed(2)}%`} 
             tooltip="Profit as percentage of revenue (healthy: 20-40%)"
           />
           <ResultItem
             label="ROAS"
-            value={roas !== null ? `${roas.toFixed(2)}x` : "N/A"}
+            value={`${safeRoas.toFixed(2)}x`}
             tooltip="Return on Ad Spend - revenue per £1 spent on ads (target: >2.5)"
           />
         </div>
@@ -236,6 +265,13 @@ export function ResultsSection({
                 >
                   {isSaving ? "Saving..." : "Save Snapshot"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard")}
+                  className="rounded-lg px-3 py-2 text-xs font-semibold text-white transition bg-black hover:bg-gray-800 cursor-pointer"
+                >
+                  Dashboard
+                </button>
               </div>
               {saveMessage && (
                 <p
@@ -252,41 +288,11 @@ export function ResultsSection({
           )}
         </div>
 
-        <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
-          <p className="font-semibold text-gray-700">
-            How to interpret your results
-          </p>
-          <div className="mt-2 space-y-2">
-            <div>
-              <p className="font-medium text-gray-700">Margin guidance</p>
-              <p>
-                Healthy UK e-commerce margin typically ranges between 20%–40%
-                depending on niche and returns.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-700">ROAS guidance</p>
-              <p>
-                ROAS above 2.5–3.0 is generally considered sustainable for paid
-                traffic.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-700">Hidden costs reminder</p>
-              <ul className="mt-1 list-disc pl-4 space-y-1">
-                <li>Marketplace/platform fees</li>
-                <li>Returns & refunds</li>
-                <li>Packaging & inserts</li>
-                <li>Customer support time</li>
-              </ul>
-            </div>
-          </div>
-        </div>
       </div>
 
       {showSnapshot && (
         <EmailSnapshotModal
-          snapshot={{ revenue, profit, margin, roas }}
+          snapshot={{ revenue: safeRevenue, profit: safeProfit, margin: safeMargin, roas: safeRoas }}
           onClose={() => setShowSnapshot(false)}
         />
       )}
