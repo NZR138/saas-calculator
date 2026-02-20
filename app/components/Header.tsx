@@ -81,14 +81,19 @@ export default function Header() {
     <>
       <header className="border-b border-gray-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link
-            href="/calculator"
-            className="text-lg font-semibold text-gray-900 transition hover:text-gray-700"
-          >
-            <h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold text-gray-900">
               UK Profit Calculator
             </h1>
-          </Link>
+            <nav className="flex items-center gap-2" aria-label="Calculator navigation">
+              <button
+                type="button"
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 transition hover:bg-gray-50 cursor-pointer"
+              >
+                E-commerce
+              </button>
+            </nav>
+          </div>
 
           {user ? (
             <div className="flex items-center gap-4">

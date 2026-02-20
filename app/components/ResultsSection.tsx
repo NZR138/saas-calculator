@@ -162,6 +162,21 @@ export function ResultsSection({
         return;
       }
 
+      const { data: oldSnapshots } = await supabase
+        .from("snapshots")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .range(7, 1000);
+
+      const oldIds = (oldSnapshots ?? [])
+        .map((snapshot) => snapshot.id)
+        .filter((id): id is string => typeof id === "string");
+
+      if (oldIds.length > 0) {
+        await supabase.from("snapshots").delete().in("id", oldIds);
+      }
+
       setSaveStatus("success");
       setSaveMessage("Snapshot saved");
     } catch {
@@ -273,6 +288,7 @@ export function ResultsSection({
                   Dashboard
                 </button>
               </div>
+              <p className="text-xs text-gray-500">Last 7 calculations are stored</p>
               {saveMessage && (
                 <p
                   className={`text-xs ${

@@ -8,12 +8,12 @@ import { getSupabaseClient } from "@/app/lib/supabaseClient";
 type SnapshotRow = {
   id: string;
   created_at: string;
+  product_cost?: number | null;
+  shipping_cost?: number | null;
+  payment_processing_percent?: number | null;
   revenue: number | null;
-  total_costs: number | null;
-  vat: number | null;
   net_profit: number | null;
   margin: number | null;
-  roas: number | null;
 };
 
 const currencyFormatter = new Intl.NumberFormat("en-GB", {
@@ -61,7 +61,7 @@ export default function DashboardPage() {
 
         const { data } = await supabase
           .from("snapshots")
-          .select("id, created_at, revenue, total_costs, vat, net_profit, margin, roas")
+          .select("*")
           .eq("user_id", currentUser.id)
           .order("created_at", { ascending: false })
           .limit(7);
@@ -122,12 +122,12 @@ export default function DashboardPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Product Cost (£)</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Shipping (£)</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Payment (%)</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700">Revenue (£)</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Total Costs (£)</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">VAT (£)</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Net Profit (£)</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Profit (£)</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700">Margin (%)</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">ROAS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
@@ -137,22 +137,22 @@ export default function DashboardPage() {
                       {dateFormatter.format(new Date(snapshot.created_at))}
                     </td>
                     <td className="px-4 py-3 text-gray-900">
+                      {currencyFormatter.format(toNumber(snapshot.product_cost))}
+                    </td>
+                    <td className="px-4 py-3 text-gray-900">
+                      {currencyFormatter.format(toNumber(snapshot.shipping_cost))}
+                    </td>
+                    <td className="px-4 py-3 text-gray-900">
+                      {toNumber(snapshot.payment_processing_percent).toFixed(2)}%
+                    </td>
+                    <td className="px-4 py-3 text-gray-900">
                       {currencyFormatter.format(toNumber(snapshot.revenue))}
-                    </td>
-                    <td className="px-4 py-3 text-gray-900">
-                      {currencyFormatter.format(toNumber(snapshot.total_costs))}
-                    </td>
-                    <td className="px-4 py-3 text-gray-900">
-                      {currencyFormatter.format(toNumber(snapshot.vat))}
                     </td>
                     <td className="px-4 py-3 text-gray-900">
                       {currencyFormatter.format(toNumber(snapshot.net_profit))}
                     </td>
                     <td className="px-4 py-3 text-gray-900">
                       {toNumber(snapshot.margin).toFixed(2)}%
-                    </td>
-                    <td className="px-4 py-3 text-gray-900">
-                      {toNumber(snapshot.roas).toFixed(2)}
                     </td>
                   </tr>
                 ))}

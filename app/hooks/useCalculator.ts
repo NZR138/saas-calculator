@@ -3,22 +3,30 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 
 export type CalculatorValues = {
-  users: number;
-  price: number;
-  fixedCosts: number;
+  productPrice: number;
+  unitsSold: number;
+  productCost: number;
+  shippingCost: number;
+  paymentProcessingPercent: number;
   adSpend: number;
   vatIncluded: boolean;
 };
 
 const DEFAULT_VALUES: CalculatorValues = {
-  users: 0,
-  price: 0,
-  fixedCosts: 0,
+  productPrice: 0,
+  unitsSold: 0,
+  productCost: 0,
+  shippingCost: 0,
+  paymentProcessingPercent: 0,
   adSpend: 0,
   vatIncluded: true,
 };
 
 const STORAGE_KEY = "uk-profit-calculator:values";
+const toSafeNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 export function useCalculator() {
   const [values, setValues] = useState<CalculatorValues>(DEFAULT_VALUES);
@@ -30,8 +38,28 @@ export function useCalculator() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored);
-        setValues(parsed);
+        const parsed = JSON.parse(stored) as Partial<CalculatorValues> & {
+          users?: unknown;
+          price?: unknown;
+          fixedCosts?: unknown;
+          shipping?: unknown;
+          paymentPercent?: unknown;
+        };
+
+        setValues({
+          productPrice: toSafeNumber(parsed.productPrice ?? parsed.price),
+          unitsSold: toSafeNumber(parsed.unitsSold ?? parsed.users),
+          productCost: toSafeNumber(parsed.productCost ?? parsed.fixedCosts),
+          shippingCost: toSafeNumber(parsed.shippingCost ?? parsed.shipping),
+          paymentProcessingPercent: toSafeNumber(
+            parsed.paymentProcessingPercent ?? parsed.paymentPercent
+          ),
+          adSpend: toSafeNumber(parsed.adSpend),
+          vatIncluded:
+            typeof parsed.vatIncluded === "boolean"
+              ? parsed.vatIncluded
+              : DEFAULT_VALUES.vatIncluded,
+        });
       }
     } catch {
     }
@@ -57,7 +85,15 @@ export function useCalculator() {
     key: keyof CalculatorValues,
     value: number | boolean
   ) => {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    if (key === "vatIncluded") {
+      setValues((prev) => ({ ...prev, vatIncluded: Boolean(value) }));
+      return;
+    }
+
+    setValues((prev) => ({
+      ...prev,
+      [key]: toSafeNumber(value),
+    }));
   };
 
   const reset = () => {
@@ -71,26 +107,39 @@ export function useCalculator() {
   };
 
   const calculated = useMemo(() => {
-    const revenue = values.users * values.price;
+    const productPrice = toSafeNumber(values.productPrice);
+    const unitsSold = toSafeNumber(values.unitsSold);
+    const productCost = toSafeNumber(values.productCost);
+    const shippingCost = toSafeNumber(values.shippingCost);
+    const paymentProcessingPercent = toSafeNumber(values.paymentProcessingPercent);
+    const adSpend = toSafeNumber(values.adSpend);
+
+    const revenue = productPrice * unitsSold;
 
     const vatAmount = values.vatIncluded ? revenue * 0.2 : 0;
 
-    const totalCosts =
-      values.fixedCosts + values.adSpend + vatAmount;
+    const paymentFee = revenue * (paymentProcessingPercent / 100);
 
-    const profit = revenue - totalCosts;
+    const totalCosts =
+      productCost +
+      shippingCost +
+      adSpend +
+      paymentFee +
+      vatAmount;
+
+    const netProfit = revenue - totalCosts;
 
     const margin =
-      revenue > 0 ? (profit / revenue) * 100 : 0;
+      revenue > 0 ? (netProfit / revenue) * 100 : 0;
 
     const roas =
-      values.adSpend > 0 ? revenue / values.adSpend : null;
+      adSpend > 0 ? revenue / adSpend : 0;
 
     return {
       revenue,
       totalCosts,
       vatAmount,
-      profit,
+      netProfit,
       margin,
       roas,
     };
@@ -104,7 +153,7 @@ export function useCalculator() {
     revenue: calculated.revenue,
     totalCosts: calculated.totalCosts,
     vatAmount: calculated.vatAmount,
-    profit: calculated.profit,
+    profit: calculated.netProfit,
     margin: calculated.margin,
     roas: calculated.roas,
   };

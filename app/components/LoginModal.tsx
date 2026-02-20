@@ -103,8 +103,6 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     }
   };
 
-  console.log("LoginModal rendered", isOpen);
-
   if (!isOpen) return null;
 
   return (

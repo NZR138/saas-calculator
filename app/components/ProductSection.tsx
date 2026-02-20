@@ -17,15 +17,15 @@ export function ProductSection({ values, setValue }: ProductSectionProps) {
       <NumberField
         label="Product Price"
         tooltip="Average price per unit"
-        value={values.price}
-        onChange={(v: number) => setValue("price", v)}
+        value={values.productPrice}
+        onChange={(v: number) => setValue("productPrice", v)}
         prefix="£"
       />
       <NumberField
         label="Units Sold"
         tooltip="Total monthly units sold"
-        value={values.users}
-        onChange={(v: number) => setValue("users", v)}
+        value={values.unitsSold}
+        onChange={(v: number) => setValue("unitsSold", v)}
       />
     </div>
   );

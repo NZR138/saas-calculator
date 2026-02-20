@@ -1,18 +1,172 @@
 "use client";
 
-import { useState } from "react";
-
-const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/test_dRm4gr0Ua8qz6F5ekKaR200";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { getSupabaseClient } from "@/app/lib/supabaseClient";
 
 export default function WrittenBreakdownPage() {
+  const searchParams = useSearchParams();
   const [questions, setQuestions] = useState(["", "", ""]);
+  const [userEmail, setUserEmail] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPaid, setIsPaid] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const syncUser = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data } = await supabase.auth.getUser();
+
+        if (isMounted) {
+          const email = data.user?.email ?? "";
+          setUserEmail(email);
+          setIsLoggedIn(Boolean(data.user));
+        }
+
+        const { data: authListener } = supabase.auth.onAuthStateChange(
+          (_event, session) => {
+            if (!isMounted) return;
+            const email = session?.user?.email ?? "";
+            setUserEmail(email);
+            setIsLoggedIn(Boolean(session?.user));
+          }
+        );
+
+        return () => {
+          authListener.subscription.unsubscribe();
+        };
+      } catch {
+        if (isMounted) {
+          setUserEmail("");
+          setIsLoggedIn(false);
+        }
+      }
+    };
+
+    let unsubscribe: (() => void) | undefined;
+
+    syncUser().then((cleanup) => {
+      unsubscribe = cleanup;
+    });
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const requestId = searchParams.get("request_id") || "";
+    const sessionId = searchParams.get("session_id") || "";
+
+    if (!requestId || !sessionId) {
+      setIsPaid(false);
+      return;
+    }
+
+    const syncPaidStatus = async () => {
+      try {
+        const response = await fetch(
+          `/api/stripe/written-request-status?request_id=${encodeURIComponent(requestId)}&session_id=${encodeURIComponent(sessionId)}`
+        );
+
+        if (!response.ok) {
+          if (isMounted) {
+            setIsPaid(false);
+          }
+          return;
+        }
+
+        const result = (await response.json()) as { paid?: boolean };
+        if (isMounted) {
+          setIsPaid(Boolean(result.paid));
+        }
+      } catch {
+        if (isMounted) {
+          setIsPaid(false);
+        }
+      }
+    };
+
+    syncPaidStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [searchParams]);
+
+  const isCancelled = searchParams.get("cancelled") === "1";
 
   const handleQuestionChange = (index: number, value: string) => {
     const updated = [...questions];
     updated[index] = value.slice(0, 200);
     setQuestions(updated);
+  };
+
+  const isEmailValid = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const handleCheckout = async () => {
+    if (!agreedToTerms || isProcessing) return;
+
+    const trimmedQuestions = questions.map((q) => q.trim());
+    const hasInvalidQuestions = trimmedQuestions.some(
+      (q) => q.length === 0 || q.length > 200
+    );
+
+    if (hasInvalidQuestions) {
+      setErrorMessage("Please fill all 3 questions (max 200 characters each).");
+      return;
+    }
+
+    const effectiveEmail = isLoggedIn ? userEmail : guestEmail.trim();
+    if (!isEmailValid(effectiveEmail)) {
+      setErrorMessage("Please enter a valid email before payment.");
+      return;
+    }
+
+    setErrorMessage("");
+    setIsProcessing(true);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      const response = await fetch("/api/stripe/checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({
+          guestEmail: isLoggedIn ? undefined : effectiveEmail,
+          questions: trimmedQuestions,
+        }),
+      });
+
+      const result = (await response.json()) as { url?: string; error?: string };
+
+      if (!response.ok || !result.url) {
+        setErrorMessage(result.error || "Unable to start checkout.");
+        return;
+      }
+
+      window.location.assign(result.url);
+    } catch {
+      setErrorMessage("Unable to start checkout.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -74,6 +228,24 @@ export default function WrittenBreakdownPage() {
           </div>
         </section>
 
+        {!isLoggedIn && (
+          <section className="mb-8">
+            <label className="block text-sm font-medium text-gray-900 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              value={guestEmail}
+              onChange={(e) => setGuestEmail(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              placeholder="you@example.com"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Required for delivery if you are checking out as a guest.
+            </p>
+          </section>
+        )}
+
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Delivery</h2>
           <ul className="space-y-2 text-gray-700">
@@ -122,36 +294,7 @@ export default function WrittenBreakdownPage() {
 
         <section className="flex gap-3">
           <button
-            onClick={async () => {
-              if (!agreedToTerms || isProcessing) return;
-              setIsProcessing(true);
-
-              const email = (typeof window !== "undefined" && sessionStorage.getItem("written_request_email")) || "";
-
-              const payload = {
-                email,
-                question_1: questions[0] || null,
-                question_2: questions[1] || null,
-                question_3: questions[2] || null,
-                status: "draft",
-                created_at: new Date().toISOString(),
-              };
-
-              try {
-                const supabase = createSupabaseClient();
-                const insertRes = await supabase.from("written_requests").insert(payload);
-                const requestId = insertRes?.data?.[0]?.id || `req_${Date.now()}`;
-                try {
-                  sessionStorage.setItem("written_request_id", String(requestId));
-                } catch {
-                }
-                const url = `${STRIPE_PAYMENT_LINK}${STRIPE_PAYMENT_LINK.includes("?") ? "&" : "?"}request_id=${encodeURIComponent(String(requestId))}`;
-                window.open(url, "_blank", "noopener,noreferrer");
-              } catch {
-              } finally {
-                setIsProcessing(false);
-              }
-            }}
+            onClick={handleCheckout}
             disabled={!agreedToTerms}
             className={`flex-1 rounded-md px-4 py-3 font-medium text-white transition ${
               agreedToTerms
@@ -168,71 +311,17 @@ export default function WrittenBreakdownPage() {
             Maybe later
           </button>
         </section>
+
+        {isPaid && (
+          <p className="mt-4 text-sm text-green-700">
+            Payment was submitted. We&apos;ll confirm and process your written breakdown shortly.
+          </p>
+        )}
+        {isCancelled && !isPaid && (
+          <p className="mt-4 text-sm text-gray-600">Payment was cancelled.</p>
+        )}
+        {errorMessage && <p className="mt-4 text-sm text-red-600">{errorMessage}</p>}
       </div>
     </div>
   );
-}
-
-type SupabaseRow = Record<string, unknown> & { id?: string | number };
-type SupabaseResponse = { data?: SupabaseRow[] };
-type SupabaseTableClient = {
-  insert: (payload: Record<string, unknown>) => Promise<SupabaseResponse>;
-  update: (payload: Record<string, unknown>) => Promise<SupabaseResponse>;
-};
-type SupabaseClient = {
-  from: (table: string) => SupabaseTableClient;
-};
-
-function createSupabaseClient(): SupabaseClient {
-  return {
-    from: (table: string) => {
-      void table;
-      return {
-        insert: async (payload: Record<string, unknown>): Promise<SupabaseResponse> => {
-          return new Promise<SupabaseResponse>((resolve) => {
-            const fakeId = `req_${Date.now()}`;
-            resolve({ data: [{ id: fakeId, ...payload }] });
-          });
-        },
-        update: async (payload: Record<string, unknown>): Promise<SupabaseResponse> => {
-          return new Promise<SupabaseResponse>((resolve) => {
-            resolve({ data: [payload] });
-          });
-        },
-      };
-    },
-  };
-}
-
-if (typeof window !== "undefined") {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const returnedRequestId = params.get("request_id") || sessionStorage.getItem("written_request_id");
-
-    if (returnedRequestId) {
-      const alreadyUpdated = sessionStorage.getItem("written_request_paid") === "true";
-      if (!alreadyUpdated) {
-        (async () => {
-          try {
-            const supabase = createSupabaseClient();
-
-            const updatePayload = {
-              status: "paid",
-              paid_at: new Date().toISOString(),
-              stripe_session_id: "placeholder_stripe_session",
-            };
-
-            await supabase.from("written_requests").update(updatePayload);
-
-            try {
-              sessionStorage.setItem("written_request_paid", "true");
-            } catch {
-            }
-          } catch {
-          }
-        })();
-      }
-    }
-  } catch {
-  }
 }
