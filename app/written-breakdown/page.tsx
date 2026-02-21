@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 
-export default function WrittenBreakdownPage() {
+function WrittenBreakdownContent() {
   const searchParams = useSearchParams();
   const [questions, setQuestions] = useState(["", "", ""]);
   const [userEmail, setUserEmail] = useState("");
@@ -323,5 +323,13 @@ export default function WrittenBreakdownPage() {
         {errorMessage && <p className="mt-4 text-sm text-red-600">{errorMessage}</p>}
       </div>
     </div>
+  );
+}
+
+export default function WrittenBreakdownPage() {
+  return (
+    <Suspense fallback={null}>
+      <WrittenBreakdownContent />
+    </Suspense>
   );
 }
