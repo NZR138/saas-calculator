@@ -1,4 +1,4 @@
-import CalculatorCard from "@/components/CalculatorCard";
+import CalculatorCard from "./components/CalculatorCard";
 
 export default function HomePage() {
   return <CalculatorCard />;
