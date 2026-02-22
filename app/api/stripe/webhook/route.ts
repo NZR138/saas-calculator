@@ -12,6 +12,7 @@ const DEFAULT_EMAIL_FROM = "onboarding@resend.dev";
 type PaymentWebhookPayload = {
   eventType: "checkout.session.completed" | "payment_intent.succeeded";
   writtenRequestId?: string;
+  stripeSessionId?: string;
   paymentIntentId?: string;
   customerEmail?: string;
   stripeObjectId: string;
@@ -24,6 +25,7 @@ function getPaymentWebhookPayload(event: Stripe.Event): PaymentWebhookPayload | 
     return {
       eventType: event.type,
       writtenRequestId: session.metadata?.written_request_id,
+      stripeSessionId: session.id,
       paymentIntentId:
         typeof session.payment_intent === "string"
           ? session.payment_intent
@@ -80,6 +82,7 @@ export async function POST(request: Request) {
   console.log("Stripe webhook received", {
     eventType: webhookPayload.eventType,
     stripeObjectId: webhookPayload.stripeObjectId,
+    stripeSessionId: webhookPayload.stripeSessionId ?? null,
     paymentIntentId: webhookPayload.paymentIntentId ?? null,
     writtenRequestId: webhookPayload.writtenRequestId ?? null,
   });
@@ -98,15 +101,42 @@ export async function POST(request: Request) {
     }
 
     const supabase = getSupabaseAdminClient();
+    const paidAtIso = new Date().toISOString();
+    const paidUpdatePayload: {
+      paid: boolean;
+      status: string;
+      paid_at: string;
+      stripe_session_id?: string;
+      payment_intent_id?: string;
+      stripe_payment_intent_id?: string;
+      guest_email?: string;
+    } = {
+      paid: true,
+      status: "paid",
+      paid_at: paidAtIso,
+    };
+
+    if (webhookPayload.stripeSessionId) {
+      paidUpdatePayload.stripe_session_id = webhookPayload.stripeSessionId;
+    }
+
+    if (webhookPayload.paymentIntentId) {
+      paidUpdatePayload.payment_intent_id = webhookPayload.paymentIntentId;
+      paidUpdatePayload.stripe_payment_intent_id = webhookPayload.paymentIntentId;
+    }
+
+    if (stripeEmail) {
+      paidUpdatePayload.guest_email = stripeEmail;
+    }
+
     const { data: paidTransitionRow, error: updateError } = await supabase
       .from("written_requests")
-      .update({
-        paid: true,
-        status: "paid",
-      })
+      .update(paidUpdatePayload)
       .eq("id", writtenRequestId)
       .eq("paid", false)
-      .select("id, user_id, guest_email, question_1, question_2, question_3, status")
+      .select(
+        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, payment_intent_id, stripe_payment_intent_id"
+      )
       .maybeSingle();
 
     if (updateError) {
@@ -122,19 +152,7 @@ export async function POST(request: Request) {
       eventType: webhookPayload.eventType,
     });
 
-    if (stripeEmail) {
-      const { error: guestEmailUpdateError } = await supabase
-        .from("written_requests")
-        .update({
-          guest_email: stripeEmail,
-        })
-        .eq("id", writtenRequestId)
-        .is("guest_email", null);
-
-      if (guestEmailUpdateError) {
-        console.error("Failed to update guest_email from Stripe session", guestEmailUpdateError);
-      }
-    } else {
+    if (!stripeEmail) {
       console.error("Missing customer email in Stripe webhook payload", {
         eventType: webhookPayload.eventType,
         stripeObjectId: webhookPayload.stripeObjectId,
@@ -144,7 +162,9 @@ export async function POST(request: Request) {
 
     const { data: writtenRequest, error: writtenRequestError } = await supabase
       .from("written_requests")
-      .select("id, user_id, guest_email, question_1, question_2, question_3, status")
+      .select(
+        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, payment_intent_id, stripe_payment_intent_id"
+      )
       .eq("id", writtenRequestId)
       .maybeSingle();
 
@@ -162,6 +182,17 @@ export async function POST(request: Request) {
     }
 
     try {
+      console.log("PAYMENT CONFIRMED", {
+        writtenRequestId,
+        customerEmail: stripeEmail ?? writtenRequest.guest_email ?? null,
+        stripeSessionId: writtenRequest.stripe_session_id ?? webhookPayload.stripeSessionId ?? null,
+        paymentIntentId:
+          writtenRequest.payment_intent_id ??
+          writtenRequest.stripe_payment_intent_id ??
+          webhookPayload.paymentIntentId ??
+          null,
+      });
+
       const resend = new Resend(process.env.RESEND_API_KEY);
 
       if (!process.env.RESEND_API_KEY) {
@@ -171,86 +202,37 @@ export async function POST(request: Request) {
         });
       }
 
-      let targetEmail = writtenRequest.guest_email?.trim() || stripeEmail || "";
-
-      if (!targetEmail && writtenRequest.user_id) {
-        const { data: userData, error: userLookupError } = await supabase.auth.admin.getUserById(
-          writtenRequest.user_id
-        );
-
-        if (userLookupError) {
-          console.error("Failed to resolve authenticated user email", {
-            writtenRequestId,
-            userId: writtenRequest.user_id,
-            error: userLookupError,
-          });
-        } else {
-          targetEmail = userData.user?.email?.trim() || "";
-        }
-      }
-
-      if (!targetEmail) {
-        console.error("No customer email resolved for payment confirmation", {
-          writtenRequestId,
-          eventType: webhookPayload.eventType,
-        });
-      } else {
-        console.log("Sending email with:", {
-          from: DEFAULT_EMAIL_FROM,
-          to: targetEmail,
-        });
-
-        const customerSendResult = await resend.emails.send({
-          from: DEFAULT_EMAIL_FROM,
-          to: targetEmail,
-          subject: "Payment confirmed — Written Breakdown",
-          text: [
-            "Your payment was successful.",
-            `Request ID: ${writtenRequest.id}`,
-            `Status: ${writtenRequest.status ?? "paid"}`,
-            "Next step: we will prepare your written breakdown and email it to you within 24–48 hours.",
-          ].join("\n"),
-        });
-
-        if (customerSendResult.error) {
-          console.error("Customer payment email failed", {
-            writtenRequestId,
-            targetEmail,
-            error: customerSendResult.error,
-          });
-        } else {
-          console.log("Customer payment email sent", {
-            writtenRequestId,
-            targetEmail,
-            emailId: customerSendResult.data?.id ?? null,
-          });
-        }
-      }
-
       const adminSendResult = await resend.emails.send({
         from: DEFAULT_EMAIL_FROM,
         to: ADMIN_GMAIL_RECIPIENT,
         subject: "New Paid Written Breakdown",
         text: [
           `Request ID: ${writtenRequest.id}`,
-          `User Email: ${targetEmail || "N/A"}`,
+          `customerEmail: ${stripeEmail ?? writtenRequest.guest_email ?? "N/A"}`,
           `Webhook Event: ${webhookPayload.eventType}`,
-          `Payment Intent ID: ${webhookPayload.paymentIntentId ?? "N/A"}`,
+          `Stripe Session ID: ${writtenRequest.stripe_session_id ?? webhookPayload.stripeSessionId ?? "N/A"}`,
+          `Payment Intent ID: ${writtenRequest.payment_intent_id ?? writtenRequest.stripe_payment_intent_id ?? webhookPayload.paymentIntentId ?? "N/A"}`,
           "",
           "Questions:",
           `1) ${writtenRequest.question_1 ?? "N/A"}`,
           `2) ${writtenRequest.question_2 ?? "N/A"}`,
           `3) ${writtenRequest.question_3 ?? "N/A"}`,
+          "",
+          "Calculator Snapshot:",
+          `${JSON.stringify(writtenRequest.calculator_snapshot ?? {}, null, 2)}`,
+          "",
+          "Calculator Results:",
+          `${JSON.stringify(writtenRequest.calculator_results ?? {}, null, 2)}`,
         ].join("\n"),
       });
 
       if (adminSendResult.error) {
-        console.error("Admin paid email failed", {
+        console.error("EMAIL FAILED", {
           writtenRequestId,
           error: adminSendResult.error,
         });
       } else {
-        console.log("Admin paid email sent", {
+        console.log("EMAIL SENT to ADMIN", {
           writtenRequestId,
           emailId: adminSendResult.data?.id ?? null,
         });

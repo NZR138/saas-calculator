@@ -13,8 +13,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 });
 
 type CheckoutRequestBody = {
+  mode?: "draft" | "checkout";
+  requestId?: string;
   guestEmail?: string;
   questions?: string[];
+  calculatorSnapshot?: Record<string, unknown>;
+  calculatorResults?: Record<string, unknown>;
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -38,7 +42,82 @@ export async function POST(request: Request) {
     const requestOrigin = new URL(request.url).origin;
 
     const body = (await request.json()) as CheckoutRequestBody;
+    const mode = body.mode === "draft" ? "draft" : "checkout";
+    const requestId = body.requestId?.trim();
     const questions = Array.isArray(body.questions) ? body.questions : [];
+    const calculatorSnapshot =
+      body.calculatorSnapshot && typeof body.calculatorSnapshot === "object"
+        ? body.calculatorSnapshot
+        : null;
+    const calculatorResults =
+      body.calculatorResults && typeof body.calculatorResults === "object"
+        ? body.calculatorResults
+        : null;
+
+    const question1 = sanitizeQuestion(questions[0]);
+    const question2 = sanitizeQuestion(questions[1]);
+    const question3 = sanitizeQuestion(questions[2]);
+
+    const supabase = getSupabaseAdminClient();
+
+    if (mode === "draft") {
+      const draftPayload = {
+        user_id: null as string | null,
+        guest_email: null as string | null,
+        question_1: question1,
+        question_2: question2,
+        question_3: question3,
+        status: "draft" as const,
+        paid: false,
+        calculator_snapshot: calculatorSnapshot,
+        calculator_results: calculatorResults,
+      };
+
+      const accessToken = parseBearerToken(request.headers.get("authorization"));
+      const authenticatedUser = await getUserFromAccessToken(accessToken);
+
+      draftPayload.user_id = authenticatedUser?.id ?? null;
+
+      if (!authenticatedUser?.id) {
+        const guestEmail = (body.guestEmail ?? "").trim();
+        draftPayload.guest_email = guestEmail || null;
+      }
+
+      if (requestId) {
+        const { data: updatedDraft, error: draftUpdateError } = await supabase
+          .from("written_requests")
+          .update(draftPayload)
+          .eq("id", requestId)
+          .select("id")
+          .maybeSingle();
+
+        if (draftUpdateError || !updatedDraft) {
+          console.error("written_requests draft update failed", draftUpdateError);
+          return NextResponse.json(
+            { error: draftUpdateError?.message || "Unable to update draft written request." },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({ requestId: updatedDraft.id, status: "draft" });
+      }
+
+      const { data: createdDraft, error: draftCreateError } = await supabase
+        .from("written_requests")
+        .insert(draftPayload)
+        .select("id")
+        .single();
+
+      if (draftCreateError || !createdDraft) {
+        console.error("written_requests draft insert failed", draftCreateError);
+        return NextResponse.json(
+          { error: draftCreateError?.message || "Unable to create draft written request." },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ requestId: createdDraft.id, status: "draft" });
+    }
 
     if (questions.length !== 3) {
       return NextResponse.json(
@@ -46,10 +125,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    const question1 = sanitizeQuestion(questions[0]);
-    const question2 = sanitizeQuestion(questions[1]);
-    const question3 = sanitizeQuestion(questions[2]);
 
     const allQuestions = [question1, question2, question3];
     const hasInvalidQuestion = allQuestions.some(
@@ -76,35 +151,59 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = getSupabaseAdminClient();
+    const checkoutPayload = {
+      user_id: authenticatedUser?.id ?? null,
+      guest_email: authenticatedUser?.id ? null : guestEmail,
+      question_1: question1,
+      question_2: question2,
+      question_3: question3,
+      status: "awaiting_payment" as const,
+      paid: false,
+      calculator_snapshot: calculatorSnapshot,
+      calculator_results: calculatorResults,
+    };
 
-    const { data: writtenRequest, error: writtenRequestError } = await supabase
-      .from("written_requests")
-      .insert({
-        user_id: authenticatedUser?.id ?? null,
-        
-        guest_email: authenticatedUser?.id ? null : guestEmail,
-        question_1: question1,
-        question_2: question2,
-        question_3: question3,
-        status: "awaiting_payment",
-        paid: false,
-      })
-      .select("id")
-      .single();
+    let writtenRequestId = requestId;
 
-    if (writtenRequestError || !writtenRequest) {
-      console.error("written_requests insert failed", writtenRequestError);
-      return NextResponse.json(
-        { error: writtenRequestError?.message || "Unable to create written request." },
-        { status: 500 }
-      );
+    if (writtenRequestId) {
+      const { data: updatedRequest, error: writtenRequestUpdateError } = await supabase
+        .from("written_requests")
+        .update(checkoutPayload)
+        .eq("id", writtenRequestId)
+        .select("id")
+        .maybeSingle();
+
+      if (writtenRequestUpdateError || !updatedRequest) {
+        console.error("written_requests update failed", writtenRequestUpdateError);
+        return NextResponse.json(
+          { error: writtenRequestUpdateError?.message || "Unable to update written request." },
+          { status: 500 }
+        );
+      }
+
+      writtenRequestId = updatedRequest.id;
+    } else {
+      const { data: writtenRequest, error: writtenRequestError } = await supabase
+        .from("written_requests")
+        .insert(checkoutPayload)
+        .select("id")
+        .single();
+
+      if (writtenRequestError || !writtenRequest) {
+        console.error("written_requests insert failed", writtenRequestError);
+        return NextResponse.json(
+          { error: writtenRequestError?.message || "Unable to create written request." },
+          { status: 500 }
+        );
+      }
+
+      writtenRequestId = writtenRequest.id;
     }
 
     const baseUrl = getAppBaseUrl(requestOrigin);
 
     const metadata: Stripe.MetadataParam = {
-      written_request_id: String(writtenRequest.id),
+      written_request_id: String(writtenRequestId),
       user_id: authenticatedUser?.id ?? "null",
     };
 
@@ -131,8 +230,8 @@ export async function POST(request: Request) {
       payment_intent_data: {
         metadata,
       },
-      success_url: `${baseUrl}/written-breakdown?request_id=${writtenRequest.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/written-breakdown?cancelled=1&request_id=${writtenRequest.id}`,
+      success_url: `${baseUrl}/written-breakdown?request_id=${writtenRequestId}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/written-breakdown?cancelled=1&request_id=${writtenRequestId}`,
     });
 
     const { error: writtenRequestUpdateError } = await supabase
@@ -140,7 +239,7 @@ export async function POST(request: Request) {
       .update({
         stripe_session_id: session.id,
       })
-      .eq("id", writtenRequest.id);
+      .eq("id", writtenRequestId);
 
     if (writtenRequestUpdateError) {
       console.error("Failed to persist stripe session id", writtenRequestUpdateError);
