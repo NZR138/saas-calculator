@@ -62,7 +62,23 @@ Create `.env.local` (local) and add to hosting platform (production):
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+STRIPE_SECRET_KEY=sk_live_or_test_key
+STRIPE_WEBHOOK_SECRET=whsec_from_stripe_listen_or_dashboard
+RESEND_API_KEY=re_xxx
+EMAIL_FROM=onboarding@resend.dev
 ```
+
+**Required for Stripe payment + email flow:**
+- `SUPABASE_SERVICE_ROLE_KEY` (server-side webhook updates)
+- `STRIPE_SECRET_KEY` (Stripe SDK/server API)
+- `STRIPE_WEBHOOK_SECRET` (webhook signature verification)
+- `RESEND_API_KEY` (payment emails)
+- `EMAIL_FROM` (sender address for Resend)
+
+**Vercel setup:**
+- Add all variables above in **Production** and **Preview** environments.
+- Re-deploy after updating environment variables.
 
 **Where to add in production:**
 - **Vercel**: Settings → Environment Variables

@@ -89,12 +89,24 @@ export async function POST(request: Request) {
 
   try {
     const writtenRequestId = webhookPayload.writtenRequestId;
+    const stripeSessionId = webhookPayload.stripeSessionId;
     const stripeEmail = webhookPayload.customerEmail?.trim();
 
-    if (!writtenRequestId) {
-      console.error("Missing written_request_id in Stripe event metadata", {
+    const lookupColumn =
+      webhookPayload.eventType === "checkout.session.completed"
+        ? "stripe_session_id"
+        : "payment_intent";
+    const lookupValue =
+      webhookPayload.eventType === "checkout.session.completed"
+        ? stripeSessionId
+        : webhookPayload.paymentIntentId;
+
+    if (!lookupValue) {
+      console.error("Missing webhook lookup value for written request update", {
         eventType: webhookPayload.eventType,
         stripeObjectId: webhookPayload.stripeObjectId,
+        stripeSessionId: stripeSessionId ?? null,
+        writtenRequestId: writtenRequestId ?? null,
         paymentIntentId: webhookPayload.paymentIntentId ?? null,
       });
       return NextResponse.json({ received: true });
@@ -107,8 +119,7 @@ export async function POST(request: Request) {
       status: string;
       paid_at: string;
       stripe_session_id?: string;
-      payment_intent_id?: string;
-      stripe_payment_intent_id?: string;
+      payment_intent?: string;
       guest_email?: string;
     } = {
       paid: true,
@@ -121,8 +132,7 @@ export async function POST(request: Request) {
     }
 
     if (webhookPayload.paymentIntentId) {
-      paidUpdatePayload.payment_intent_id = webhookPayload.paymentIntentId;
-      paidUpdatePayload.stripe_payment_intent_id = webhookPayload.paymentIntentId;
+      paidUpdatePayload.payment_intent = webhookPayload.paymentIntentId;
     }
 
     if (stripeEmail) {
@@ -132,10 +142,10 @@ export async function POST(request: Request) {
     const { data: paidTransitionRow, error: updateError } = await supabase
       .from("written_requests")
       .update(paidUpdatePayload)
-      .eq("id", writtenRequestId)
-      .eq("paid", false)
+      .eq(lookupColumn, lookupValue)
+      .or("paid.eq.false,paid.is.null")
       .select(
-        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, payment_intent_id, stripe_payment_intent_id"
+        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, payment_intent"
       )
       .maybeSingle();
 
@@ -147,7 +157,10 @@ export async function POST(request: Request) {
     const paymentMarkedNow = Boolean(paidTransitionRow);
 
     console.log("Payment status sync result", {
-      writtenRequestId,
+      writtenRequestId: writtenRequestId ?? null,
+      stripeSessionId: stripeSessionId ?? null,
+      lookupColumn,
+      lookupValue,
       paymentMarkedNow,
       eventType: webhookPayload.eventType,
     });
@@ -163,9 +176,9 @@ export async function POST(request: Request) {
     const { data: writtenRequest, error: writtenRequestError } = await supabase
       .from("written_requests")
       .select(
-        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, payment_intent_id, stripe_payment_intent_id"
+        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, payment_intent"
       )
-      .eq("id", writtenRequestId)
+      .eq(lookupColumn, lookupValue)
       .maybeSingle();
 
     if (writtenRequestError || !writtenRequest) {
@@ -186,11 +199,7 @@ export async function POST(request: Request) {
         writtenRequestId,
         customerEmail: stripeEmail ?? writtenRequest.guest_email ?? null,
         stripeSessionId: writtenRequest.stripe_session_id ?? webhookPayload.stripeSessionId ?? null,
-        paymentIntentId:
-          writtenRequest.payment_intent_id ??
-          writtenRequest.stripe_payment_intent_id ??
-          webhookPayload.paymentIntentId ??
-          null,
+        paymentIntentId: writtenRequest.payment_intent ?? webhookPayload.paymentIntentId ?? null,
       });
 
       const resend = new Resend(process.env.RESEND_API_KEY);
@@ -211,7 +220,7 @@ export async function POST(request: Request) {
           `customerEmail: ${stripeEmail ?? writtenRequest.guest_email ?? "N/A"}`,
           `Webhook Event: ${webhookPayload.eventType}`,
           `Stripe Session ID: ${writtenRequest.stripe_session_id ?? webhookPayload.stripeSessionId ?? "N/A"}`,
-          `Payment Intent ID: ${writtenRequest.payment_intent_id ?? writtenRequest.stripe_payment_intent_id ?? webhookPayload.paymentIntentId ?? "N/A"}`,
+          `Payment Intent ID: ${writtenRequest.payment_intent ?? webhookPayload.paymentIntentId ?? "N/A"}`,
           "",
           "Questions:",
           `1) ${writtenRequest.question_1 ?? "N/A"}`,
