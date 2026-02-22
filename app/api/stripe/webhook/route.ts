@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     const lookupColumn =
       webhookPayload.eventType === "checkout.session.completed"
         ? "stripe_session_id"
-        : "payment_intent";
+        : "stripe_payment_intent_id";
     const lookupValue =
       webhookPayload.eventType === "checkout.session.completed"
         ? stripeSessionId
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       status: string;
       paid_at: string;
       stripe_session_id?: string;
-      payment_intent?: string;
+      stripe_payment_intent_id?: string;
       guest_email?: string;
     } = {
       paid: true,
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
     }
 
     if (webhookPayload.paymentIntentId) {
-      paidUpdatePayload.payment_intent = webhookPayload.paymentIntentId;
+      paidUpdatePayload.stripe_payment_intent_id = webhookPayload.paymentIntentId;
     }
 
     if (stripeEmail) {
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
       .eq(lookupColumn, lookupValue)
       .or("paid.eq.false,paid.is.null")
       .select(
-        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, payment_intent"
+        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, stripe_payment_intent_id"
       )
       .maybeSingle();
 
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
     const { data: writtenRequest, error: writtenRequestError } = await supabase
       .from("written_requests")
       .select(
-        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, payment_intent"
+        "id, user_id, guest_email, question_1, question_2, question_3, status, calculator_snapshot, calculator_results, stripe_session_id, stripe_payment_intent_id"
       )
       .eq(lookupColumn, lookupValue)
       .maybeSingle();
@@ -199,7 +199,7 @@ export async function POST(request: Request) {
         writtenRequestId,
         customerEmail: stripeEmail ?? writtenRequest.guest_email ?? null,
         stripeSessionId: writtenRequest.stripe_session_id ?? webhookPayload.stripeSessionId ?? null,
-        paymentIntentId: writtenRequest.payment_intent ?? webhookPayload.paymentIntentId ?? null,
+        paymentIntentId: writtenRequest.stripe_payment_intent_id ?? webhookPayload.paymentIntentId ?? null,
       });
 
       const resend = new Resend(process.env.RESEND_API_KEY);
@@ -220,7 +220,7 @@ export async function POST(request: Request) {
           `customerEmail: ${stripeEmail ?? writtenRequest.guest_email ?? "N/A"}`,
           `Webhook Event: ${webhookPayload.eventType}`,
           `Stripe Session ID: ${writtenRequest.stripe_session_id ?? webhookPayload.stripeSessionId ?? "N/A"}`,
-          `Payment Intent ID: ${writtenRequest.payment_intent ?? webhookPayload.paymentIntentId ?? "N/A"}`,
+          `Payment Intent ID: ${writtenRequest.stripe_payment_intent_id ?? webhookPayload.paymentIntentId ?? "N/A"}`,
           "",
           "Questions:",
           `1) ${writtenRequest.question_1 ?? "N/A"}`,
