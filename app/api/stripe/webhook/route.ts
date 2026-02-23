@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import { Resend } from "resend";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,9 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL as string,
   process.env.SUPABASE_SERVICE_ROLE_KEY as string
 );
+
+const ADMIN_GMAIL_RECIPIENT = "ask.profit.calcul@gmail.com";
+const DEFAULT_EMAIL_FROM = "onboarding@resend.dev";
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -43,7 +47,7 @@ export async function POST(req: NextRequest) {
 
       console.log("✅ Updating written request:", writtenRequestId);
 
-      const { error } = await supabase
+      const { data: updatedRequest, error } = await supabase
         .from("written_requests")
         .update({
           status: "paid",
@@ -55,7 +59,11 @@ export async function POST(req: NextRequest) {
               ? session.payment_intent
               : null,
         })
-        .eq("id", writtenRequestId);
+        .eq("id", writtenRequestId)
+        .select(
+          "id, user_id, guest_email, question_1, question_2, question_3, created_at, paid, admin_email_sent_at"
+        )
+        .maybeSingle();
 
       if (error) {
         console.error("❌ Supabase update error:", error);
@@ -63,6 +71,54 @@ export async function POST(req: NextRequest) {
           { error: "Database update failed" },
           { status: 500 }
         );
+      }
+
+      if (
+        updatedRequest?.paid === true &&
+        updatedRequest.admin_email_sent_at == null
+      ) {
+        try {
+          if (!process.env.RESEND_API_KEY) {
+            console.error("❌ RESEND_API_KEY is missing");
+          } else {
+            const resend = new Resend(process.env.RESEND_API_KEY);
+
+            const identityLine = updatedRequest.guest_email
+              ? `guest_email: ${updatedRequest.guest_email}`
+              : `user_id: ${updatedRequest.user_id ?? "N/A"}`;
+
+            const adminSendResult = await resend.emails.send({
+              from: DEFAULT_EMAIL_FROM,
+              to: ADMIN_GMAIL_RECIPIENT,
+              subject: "New Paid Written Breakdown",
+              text: [
+                `request_id: ${updatedRequest.id}`,
+                identityLine,
+                `question_1: ${updatedRequest.question_1 ?? ""}`,
+                `question_2: ${updatedRequest.question_2 ?? ""}`,
+                `question_3: ${updatedRequest.question_3 ?? ""}`,
+                `created_at: ${updatedRequest.created_at ?? ""}`,
+                "Paid: YES",
+              ].join("\n"),
+            });
+
+            if (adminSendResult.error) {
+              console.error("❌ Admin email send error:", adminSendResult.error);
+            } else {
+              const { error: adminEmailSentAtError } = await supabase
+                .from("written_requests")
+                .update({ admin_email_sent_at: new Date().toISOString() })
+                .eq("id", updatedRequest.id)
+                .is("admin_email_sent_at", null);
+
+              if (adminEmailSentAtError) {
+                console.error("❌ admin_email_sent_at update error:", adminEmailSentAtError);
+              }
+            }
+          }
+        } catch (emailError) {
+          console.error("❌ Admin email flow failed:", emailError);
+        }
       }
 
       console.log("🎉 Payment successfully recorded");
