@@ -161,7 +161,7 @@ function WrittenBreakdownContent() {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
-          guestEmail: isLoggedIn ? undefined : effectiveEmail,
+          guestEmail: effectiveEmail,
           questions: trimmedQuestions,
           calculatorSnapshot,
           calculatorResults,

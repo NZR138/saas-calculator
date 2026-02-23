@@ -14,7 +14,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY as string
 );
 
-const ADMIN_GMAIL_RECIPIENT = "ask.profit.calcul@gmail.com";
+const ADMIN_EMAIL_RECIPIENT = process.env.ADMIN_EMAIL as string;
 const DEFAULT_EMAIL_FROM = "onboarding@resend.dev";
 
 export async function POST(req: NextRequest) {
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
       console.log("✅ Updating written request:", writtenRequestId);
 
-      const { data: updatedRequest, error } = await supabase
+      const { error } = await supabase
         .from("written_requests")
         .update({
           status: "paid",
@@ -59,11 +59,7 @@ export async function POST(req: NextRequest) {
               ? session.payment_intent
               : null,
         })
-        .eq("id", writtenRequestId)
-        .select(
-          "id, user_id, guest_email, question_1, question_2, question_3, created_at, paid, admin_email_sent_at"
-        )
-        .maybeSingle();
+        .eq("id", writtenRequestId);
 
       if (error) {
         console.error("❌ Supabase update error:", error);
@@ -73,31 +69,40 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (
-        updatedRequest?.paid === true &&
-        updatedRequest.admin_email_sent_at == null
-      ) {
+      const { data: request, error: requestLoadError } = await supabase
+        .from("written_requests")
+        .select("*")
+        .eq("id", writtenRequestId)
+        .single();
+
+      if (requestLoadError) {
+        console.error("❌ Failed to load request for admin email:", requestLoadError);
+      }
+
+      if (request?.paid === true && request.admin_email_sent_at == null) {
         try {
           if (!process.env.RESEND_API_KEY) {
             console.error("❌ RESEND_API_KEY is missing");
+          } else if (!ADMIN_EMAIL_RECIPIENT) {
+            console.error("❌ ADMIN_EMAIL is missing");
           } else {
             const resend = new Resend(process.env.RESEND_API_KEY);
 
-            const identityLine = updatedRequest.guest_email
-              ? `guest_email: ${updatedRequest.guest_email}`
-              : `user_id: ${updatedRequest.user_id ?? "N/A"}`;
+            const identityLine = request.guest_email
+              ? `guest_email: ${request.guest_email}`
+              : `user_id: ${request.user_id ?? "N/A"}`;
 
             const adminSendResult = await resend.emails.send({
               from: DEFAULT_EMAIL_FROM,
-              to: ADMIN_GMAIL_RECIPIENT,
+              to: ADMIN_EMAIL_RECIPIENT,
               subject: "New Paid Written Breakdown",
               text: [
-                `request_id: ${updatedRequest.id}`,
+                `request_id: ${request.id}`,
                 identityLine,
-                `question_1: ${updatedRequest.question_1 ?? ""}`,
-                `question_2: ${updatedRequest.question_2 ?? ""}`,
-                `question_3: ${updatedRequest.question_3 ?? ""}`,
-                `created_at: ${updatedRequest.created_at ?? ""}`,
+                `question_1: ${request.question_1 ?? ""}`,
+                `question_2: ${request.question_2 ?? ""}`,
+                `question_3: ${request.question_3 ?? ""}`,
+                `created_at: ${request.created_at ?? ""}`,
                 "Paid: YES",
               ].join("\n"),
             });
@@ -108,7 +113,7 @@ export async function POST(req: NextRequest) {
               const { error: adminEmailSentAtError } = await supabase
                 .from("written_requests")
                 .update({ admin_email_sent_at: new Date().toISOString() })
-                .eq("id", updatedRequest.id)
+                .eq("id", request.id)
                 .is("admin_email_sent_at", null);
 
               if (adminEmailSentAtError) {
