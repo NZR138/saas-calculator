@@ -3,9 +3,11 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
+import { useCalculator } from "@/app/hooks/useCalculator";
 
 function WrittenBreakdownContent() {
   const searchParams = useSearchParams();
+  const { values, revenue, totalCosts, profit, margin } = useCalculator();
   const [questions, setQuestions] = useState(["", "", ""]);
   const [userEmail, setUserEmail] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
@@ -142,6 +144,16 @@ function WrittenBreakdownContent() {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
 
+      // build calculator snapshot safely
+      const calculatorSnapshot = values ?? null;
+
+      const calculatorResults = {
+        revenue: revenue ?? null,
+        totalCosts: totalCosts ?? null,
+        profit: profit ?? null,
+        margin: margin ?? null,
+      };
+
       const response = await fetch("/api/stripe/checkout-session", {
         method: "POST",
         headers: {
@@ -151,6 +163,8 @@ function WrittenBreakdownContent() {
         body: JSON.stringify({
           guestEmail: isLoggedIn ? undefined : effectiveEmail,
           questions: trimmedQuestions,
+          calculatorSnapshot,
+          calculatorResults,
         }),
       });
 
