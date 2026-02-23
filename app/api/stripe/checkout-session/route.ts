@@ -78,6 +78,11 @@ export async function POST(request: Request) {
 
       draftPayload.user_id = authenticatedUser?.id ?? null;
 
+      if (authenticatedUser?.id) {
+        const { data: userData } = await supabase.auth.admin.getUserById(authenticatedUser.id);
+        draftPayload.guest_email = userData.user?.email ?? null;
+      }
+
       if (!authenticatedUser?.id) {
         const guestEmail = (body.guestEmail ?? "").trim();
         draftPayload.guest_email = guestEmail || null;
@@ -144,6 +149,12 @@ export async function POST(request: Request) {
     const guestEmail = (body.guestEmail ?? "").trim();
     const email = authenticatedUser?.email || guestEmail;
 
+    let persistedGuestEmail = guestEmail || null;
+    if (authenticatedUser?.id) {
+      const { data: userData } = await supabase.auth.admin.getUserById(authenticatedUser.id);
+      persistedGuestEmail = userData.user?.email ?? authenticatedUser.email ?? null;
+    }
+
     if (!EMAIL_REGEX.test(email)) {
       return NextResponse.json(
         { error: "A valid email is required." },
@@ -153,7 +164,7 @@ export async function POST(request: Request) {
 
     const checkoutPayload = {
       user_id: authenticatedUser?.id ?? null,
-      guest_email: authenticatedUser?.id ? null : guestEmail,
+      guest_email: persistedGuestEmail,
       question_1: question1,
       question_2: question2,
       question_3: question3,

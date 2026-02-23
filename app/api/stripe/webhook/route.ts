@@ -87,9 +87,15 @@ export async function POST(req: NextRequest) {
             console.error("❌ ADMIN_EMAIL is missing");
           } else {
             const resend = new Resend(process.env.RESEND_API_KEY);
+            let identityEmail = request.guest_email as string | null;
 
-            const identityLine = request.guest_email
-              ? `guest_email: ${request.guest_email}`
+            if (!identityEmail && request.user_id) {
+              const { data: userData } = await supabase.auth.admin.getUserById(request.user_id);
+              identityEmail = userData.user?.email ?? null;
+            }
+
+            const identityLine = identityEmail
+              ? `email: ${identityEmail}`
               : `user_id: ${request.user_id ?? "N/A"}`;
 
             const adminSendResult = await resend.emails.send({
