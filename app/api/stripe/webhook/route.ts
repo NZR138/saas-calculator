@@ -54,6 +54,8 @@ function getPaymentWebhookPayload(event: Stripe.Event): PaymentWebhookPayload | 
 }
 
 export async function POST(request: Request) {
+  console.log("Webhook hit");
+
   const body = await request.text();
   const stripeSignature = request.headers.get("stripe-signature");
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
@@ -73,19 +75,22 @@ export async function POST(request: Request) {
     return new NextResponse("Webhook Error", { status: 400 });
   }
 
+  console.log("Stripe event type:", event.type);
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+
+    if (!session.metadata?.written_request_id) {
+      console.error("Missing written_request_id metadata");
+      return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
+    }
+  }
+
   const webhookPayload = getPaymentWebhookPayload(event);
 
   if (!webhookPayload) {
     return NextResponse.json({ received: true });
   }
-
-  console.log("Stripe webhook received", {
-    eventType: webhookPayload.eventType,
-    stripeObjectId: webhookPayload.stripeObjectId,
-    stripeSessionId: webhookPayload.stripeSessionId ?? null,
-    paymentIntentId: webhookPayload.paymentIntentId ?? null,
-    writtenRequestId: webhookPayload.writtenRequestId ?? null,
-  });
 
   try {
     const writtenRequestId = webhookPayload.writtenRequestId;
@@ -111,6 +116,8 @@ export async function POST(request: Request) {
       });
       return NextResponse.json({ received: true });
     }
+
+    console.log("Updating written request:", writtenRequestId);
 
     const supabase = getSupabaseAdminClient();
     const paidAtIso = new Date().toISOString();
@@ -156,15 +163,6 @@ export async function POST(request: Request) {
 
     const paymentMarkedNow = Boolean(paidTransitionRow);
 
-    console.log("Payment status sync result", {
-      writtenRequestId: writtenRequestId ?? null,
-      stripeSessionId: stripeSessionId ?? null,
-      lookupColumn,
-      lookupValue,
-      paymentMarkedNow,
-      eventType: webhookPayload.eventType,
-    });
-
     if (!stripeEmail) {
       console.error("Missing customer email in Stripe webhook payload", {
         eventType: webhookPayload.eventType,
@@ -187,21 +185,10 @@ export async function POST(request: Request) {
     }
 
     if (!paymentMarkedNow) {
-      console.log("Skipping duplicate email send: written request already paid", {
-        writtenRequestId,
-        eventType: webhookPayload.eventType,
-      });
       return NextResponse.json({ received: true });
     }
 
     try {
-      console.log("PAYMENT CONFIRMED", {
-        writtenRequestId,
-        customerEmail: stripeEmail ?? writtenRequest.guest_email ?? null,
-        stripeSessionId: writtenRequest.stripe_session_id ?? webhookPayload.stripeSessionId ?? null,
-        paymentIntentId: writtenRequest.stripe_payment_intent_id ?? webhookPayload.paymentIntentId ?? null,
-      });
-
       const resend = new Resend(process.env.RESEND_API_KEY);
 
       if (!process.env.RESEND_API_KEY) {
@@ -239,11 +226,6 @@ export async function POST(request: Request) {
         console.error("EMAIL FAILED", {
           writtenRequestId,
           error: adminSendResult.error,
-        });
-      } else {
-        console.log("EMAIL SENT to ADMIN", {
-          writtenRequestId,
-          emailId: adminSendResult.data?.id ?? null,
         });
       }
     } catch (emailError) {
