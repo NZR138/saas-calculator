@@ -17,6 +17,13 @@ const supabase = createClient(
 const ADMIN_EMAIL_RECIPIENT = process.env.ADMIN_EMAIL as string;
 const DEFAULT_EMAIL_FROM = "onboarding@resend.dev";
 
+function readPaymentIntentIdFromCheckoutSession(session: Stripe.Checkout.Session) {
+  if (typeof session.payment_intent === "string") {
+    return session.payment_intent;
+  }
+  return session.payment_intent?.id ?? null;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const signature = req.headers.get("stripe-signature") as string;
@@ -35,34 +42,112 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    console.log("[stripe-webhook] received", {
+      eventType: event.type,
+      hasAdminEmail: Boolean(ADMIN_EMAIL_RECIPIENT),
+    });
+
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
+      const writtenRequestId =
+        session.metadata?.written_request_id ??
+        (typeof session.client_reference_id === "string"
+          ? session.client_reference_id
+          : null);
+      const paymentIntentId = readPaymentIntentIdFromCheckoutSession(session);
 
-      const writtenRequestId = session.metadata?.written_request_id;
+      console.log("[stripe-webhook] checkout.session.completed", {
+        writtenRequestId,
+        stripeSessionId: session.id,
+        paymentIntentId,
+      });
 
-      if (!writtenRequestId) {
-        console.error("❌ Missing written_request_id in metadata");
-        return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
+      if (writtenRequestId) {
+        const updatePayload: {
+          status: "awaiting_payment";
+          stripe_session_id: string;
+          payment_intent_id?: string;
+        } = {
+          status: "awaiting_payment",
+          stripe_session_id: session.id,
+        };
+
+        if (paymentIntentId) {
+          updatePayload.payment_intent_id = paymentIntentId;
+        }
+
+        const { data: checkoutLinkedRow, error: checkoutLinkError } = await supabase
+          .from("written_requests")
+          .update(updatePayload)
+          .eq("id", writtenRequestId)
+          .select("id")
+          .maybeSingle();
+
+        console.log("[stripe-webhook] checkout link update", {
+          writtenRequestId,
+          paymentIntentId,
+          updated: Boolean(checkoutLinkedRow),
+          error: checkoutLinkError?.message ?? null,
+        });
+
+        if (checkoutLinkError) {
+          return NextResponse.json(
+            { error: "Database update failed" },
+            { status: 500 }
+          );
+        }
       }
 
-      console.log("✅ Updating written request:", writtenRequestId);
+      return NextResponse.json({ received: true }, { status: 200 });
+    }
 
-      const { error } = await supabase
+    if (event.type === "payment_intent.succeeded") {
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      const paymentIntentId = paymentIntent.id;
+      let writtenRequestId = paymentIntent.metadata?.written_request_id ?? null;
+
+      if (!writtenRequestId) {
+        const { data: linkedRequest } = await supabase
+          .from("written_requests")
+          .select("id")
+          .eq("payment_intent_id", paymentIntentId)
+          .maybeSingle();
+        writtenRequestId = linkedRequest?.id ?? null;
+      }
+
+      console.log("[stripe-webhook] payment_intent.succeeded", {
+        writtenRequestId,
+        paymentIntentId,
+      });
+
+      if (!writtenRequestId) {
+        console.error("[stripe-webhook] missing written_request linkage", {
+          paymentIntentId,
+        });
+        return NextResponse.json({ received: true }, { status: 200 });
+      }
+
+      const paidAt = new Date().toISOString();
+      const { data: paidRow, error: paidUpdateError } = await supabase
         .from("written_requests")
         .update({
           status: "paid",
           paid: true,
-          paid_at: new Date().toISOString(),
-          stripe_session_id: session.id,
-          payment_intent_id:
-            typeof session.payment_intent === "string"
-              ? session.payment_intent
-              : null,
+          paid_at: paidAt,
+          payment_intent_id: paymentIntentId,
         })
-        .eq("id", writtenRequestId);
+        .eq("id", writtenRequestId)
+        .select("id")
+        .maybeSingle();
 
-      if (error) {
-        console.error("❌ Supabase update error:", error);
+      console.log("[stripe-webhook] payment update", {
+        writtenRequestId,
+        paymentIntentId,
+        updated: Boolean(paidRow),
+        error: paidUpdateError?.message ?? null,
+      });
+
+      if (paidUpdateError) {
         return NextResponse.json(
           { error: "Database update failed" },
           { status: 500 }
@@ -75,16 +160,21 @@ export async function POST(req: NextRequest) {
         .eq("id", writtenRequestId)
         .single();
 
-      if (requestLoadError) {
-        console.error("❌ Failed to load request for admin email:", requestLoadError);
+      if (requestLoadError || !request) {
+        console.error("[stripe-webhook] request load failed", {
+          writtenRequestId,
+          paymentIntentId,
+          error: requestLoadError?.message ?? null,
+        });
+        return NextResponse.json({ received: true }, { status: 200 });
       }
 
-      if (request?.paid === true && request.admin_email_sent_at == null) {
+      if (request.paid === true && request.admin_email_sent_at == null) {
         try {
           if (!process.env.RESEND_API_KEY) {
-            console.error("❌ RESEND_API_KEY is missing");
+            console.error("[stripe-webhook] missing RESEND_API_KEY");
           } else if (!ADMIN_EMAIL_RECIPIENT) {
-            console.error("❌ ADMIN_EMAIL is missing");
+            console.error("[stripe-webhook] missing ADMIN_EMAIL");
           } else {
             const resend = new Resend(process.env.RESEND_API_KEY);
             let identityEmail = request.guest_email as string | null;
@@ -94,28 +184,33 @@ export async function POST(req: NextRequest) {
               identityEmail = userData.user?.email ?? null;
             }
 
-            const identityLine = identityEmail
-              ? `email: ${identityEmail}`
-              : `user_id: ${request.user_id ?? "N/A"}`;
-
+            const calculatorResults = (request.calculator_results ?? {}) as Record<string, unknown>;
             const adminSendResult = await resend.emails.send({
               from: DEFAULT_EMAIL_FROM,
               to: ADMIN_EMAIL_RECIPIENT,
               subject: "New Paid Written Breakdown",
               text: [
                 `request_id: ${request.id}`,
-                identityLine,
+                `email: ${identityEmail ?? "N/A"}`,
                 `question_1: ${request.question_1 ?? ""}`,
                 `question_2: ${request.question_2 ?? ""}`,
                 `question_3: ${request.question_3 ?? ""}`,
-                `created_at: ${request.created_at ?? ""}`,
+                `revenue: ${String(calculatorResults.revenue ?? "N/A")}`,
+                `totalCosts: ${String(calculatorResults.totalCosts ?? "N/A")}`,
+                `profit: ${String(calculatorResults.profit ?? "N/A")}`,
+                `margin: ${String(calculatorResults.margin ?? "N/A")}`,
                 "Paid: YES",
               ].join("\n"),
             });
 
-            if (adminSendResult.error) {
-              console.error("❌ Admin email send error:", adminSendResult.error);
-            } else {
+            console.log("[stripe-webhook] resend result", {
+              writtenRequestId,
+              paymentIntentId,
+              ok: !adminSendResult.error,
+              error: adminSendResult.error?.message ?? null,
+            });
+
+            if (!adminSendResult.error) {
               const { error: adminEmailSentAtError } = await supabase
                 .from("written_requests")
                 .update({ admin_email_sent_at: new Date().toISOString() })
@@ -123,16 +218,20 @@ export async function POST(req: NextRequest) {
                 .is("admin_email_sent_at", null);
 
               if (adminEmailSentAtError) {
-                console.error("❌ admin_email_sent_at update error:", adminEmailSentAtError);
+                console.error("[stripe-webhook] admin_email_sent_at update failed", {
+                  writtenRequestId,
+                  paymentIntentId,
+                  error: adminEmailSentAtError.message,
+                });
               }
             }
           }
         } catch (emailError) {
-          console.error("❌ Admin email flow failed:", emailError);
+          console.error("[stripe-webhook] admin email flow failed", emailError);
         }
       }
 
-      console.log("🎉 Payment successfully recorded");
+      return NextResponse.json({ received: true }, { status: 200 });
     }
 
     return NextResponse.json({ received: true }, { status: 200 });
