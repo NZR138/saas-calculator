@@ -47,8 +47,7 @@ export async function POST(req: NextRequest) {
       hasAdminEmail: Boolean(ADMIN_EMAIL_RECIPIENT),
     });
 
-    let responseBody: { received?: boolean; error?: string } = { received: true };
-    let responseStatus = 200;
+    const responseBody: { received: boolean } = { received: true };
 
     switch (event.type) {
       case "checkout.session.completed": {
@@ -95,8 +94,11 @@ export async function POST(req: NextRequest) {
           });
 
           if (checkoutLinkError) {
-            responseBody = { error: "Database update failed" };
-            responseStatus = 500;
+            console.error("[WEBHOOK] CHECKOUT LINK UPDATE ERROR", {
+              writtenRequestId,
+              paymentIntentId,
+              error: checkoutLinkError.message,
+            });
           }
         }
         break;
@@ -134,6 +136,12 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        console.log("[WEBHOOK] UPDATE START", {
+          writtenRequestId,
+          paymentIntentId,
+          updateBy: "id",
+        });
+
         const paidAt = new Date().toISOString();
         const { data: paidRow, error: paidUpdateError } = await supabase
           .from("written_requests")
@@ -147,6 +155,14 @@ export async function POST(req: NextRequest) {
           .select("id")
           .maybeSingle();
 
+        console.log("[WEBHOOK] UPDATE RESULT", {
+          writtenRequestId,
+          paymentIntentId,
+          updateBy: "id",
+          updated: Boolean(paidRow),
+          error: paidUpdateError?.message ?? null,
+        });
+
         console.log("[stripe-webhook] payment update", {
           writtenRequestId,
           paymentIntentId,
@@ -155,8 +171,19 @@ export async function POST(req: NextRequest) {
         });
 
         if (paidUpdateError) {
-          responseBody = { error: "Database update failed" };
-          responseStatus = 500;
+          console.error("[WEBHOOK] PAYMENT UPDATE ERROR", {
+            writtenRequestId,
+            paymentIntentId,
+            error: paidUpdateError.message,
+          });
+          break;
+        }
+
+        if (!paidRow) {
+          console.error("[WEBHOOK] CRITICAL: PAYMENT UPDATE AFFECTED 0 ROWS", {
+            writtenRequestId,
+            paymentIntentId,
+          });
           break;
         }
 
@@ -227,6 +254,11 @@ export async function POST(req: NextRequest) {
               });
 
               if (adminSendResult && !adminSendResult.error) {
+                console.log("[WEBHOOK] ADMIN_EMAIL_SENT_AT UPDATE START", {
+                  writtenRequestId,
+                  paymentIntentId,
+                });
+
                 const { error: adminEmailSentAtError } = await supabase
                   .from("written_requests")
                   .update({ admin_email_sent_at: new Date().toISOString() })
@@ -247,6 +279,13 @@ export async function POST(req: NextRequest) {
           } catch (emailError) {
             console.error("[stripe-webhook] admin email flow failed", emailError);
           }
+        } else {
+          console.log("[WEBHOOK] EMAIL BLOCK SKIPPED", {
+            writtenRequestId,
+            paymentIntentId,
+            paid: request.paid,
+            adminEmailSentAt: request.admin_email_sent_at,
+          });
         }
         break;
       }
@@ -255,7 +294,7 @@ export async function POST(req: NextRequest) {
         console.log("[stripe-webhook] unhandled event", event.type);
     }
 
-    return NextResponse.json(responseBody, { status: responseStatus });
+    return NextResponse.json(responseBody, { status: 200 });
   } catch (err) {
     console.error("❌ Webhook processing failed:", err);
     return NextResponse.json(
