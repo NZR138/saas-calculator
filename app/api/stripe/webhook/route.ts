@@ -121,6 +121,12 @@ export async function POST(req: NextRequest) {
           paymentIntentId,
         });
 
+        console.log("[WEBHOOK] payment_intent.succeeded START", {
+          paymentIntentId,
+          writtenRequestId,
+          hasAdminEmail: Boolean(ADMIN_EMAIL_RECIPIENT),
+        });
+
         if (!writtenRequestId) {
           console.error("[stripe-webhook] missing written_request linkage", {
             paymentIntentId,
@@ -176,6 +182,7 @@ export async function POST(req: NextRequest) {
             } else if (!ADMIN_EMAIL_RECIPIENT) {
               console.error("[stripe-webhook] missing ADMIN_EMAIL");
             } else {
+              console.log("[WEBHOOK] EMAIL BLOCK ENTER");
               const resend = new Resend(process.env.RESEND_API_KEY);
               let identityEmail = request.guest_email as string | null;
 
@@ -185,32 +192,41 @@ export async function POST(req: NextRequest) {
               }
 
               const calculatorResults = (request.calculator_results ?? {}) as Record<string, unknown>;
-              const adminSendResult = await resend.emails.send({
-                from: DEFAULT_EMAIL_FROM,
-                to: ADMIN_EMAIL_RECIPIENT,
-                subject: "New Paid Written Breakdown",
-                text: [
-                  `request_id: ${request.id}`,
-                  `email: ${identityEmail ?? "N/A"}`,
-                  `question_1: ${request.question_1 ?? ""}`,
-                  `question_2: ${request.question_2 ?? ""}`,
-                  `question_3: ${request.question_3 ?? ""}`,
-                  `revenue: ${String(calculatorResults.revenue ?? "N/A")}`,
-                  `totalCosts: ${String(calculatorResults.totalCosts ?? "N/A")}`,
-                  `profit: ${String(calculatorResults.profit ?? "N/A")}`,
-                  `margin: ${String(calculatorResults.margin ?? "N/A")}`,
-                  "Paid: YES",
-                ].join("\n"),
-              });
+              let adminSendResult:
+                | Awaited<ReturnType<typeof resend.emails.send>>
+                | null = null;
+
+              try {
+                adminSendResult = await resend.emails.send({
+                  from: DEFAULT_EMAIL_FROM,
+                  to: ADMIN_EMAIL_RECIPIENT,
+                  subject: "New Paid Written Breakdown",
+                  text: [
+                    `request_id: ${request.id}`,
+                    `email: ${identityEmail ?? "N/A"}`,
+                    `question_1: ${request.question_1 ?? ""}`,
+                    `question_2: ${request.question_2 ?? ""}`,
+                    `question_3: ${request.question_3 ?? ""}`,
+                    `revenue: ${String(calculatorResults.revenue ?? "N/A")}`,
+                    `totalCosts: ${String(calculatorResults.totalCosts ?? "N/A")}`,
+                    `profit: ${String(calculatorResults.profit ?? "N/A")}`,
+                    `margin: ${String(calculatorResults.margin ?? "N/A")}`,
+                    "Paid: YES",
+                  ].join("\n"),
+                });
+                console.log("[WEBHOOK] EMAIL SENT SUCCESS");
+              } catch (error) {
+                console.error("[WEBHOOK] EMAIL SEND ERROR", error);
+              }
 
               console.log("[stripe-webhook] resend result", {
                 writtenRequestId,
                 paymentIntentId,
-                ok: !adminSendResult.error,
-                error: adminSendResult.error?.message ?? null,
+                ok: adminSendResult ? !adminSendResult.error : false,
+                error: adminSendResult?.error?.message ?? null,
               });
 
-              if (!adminSendResult.error) {
+              if (adminSendResult && !adminSendResult.error) {
                 const { error: adminEmailSentAtError } = await supabase
                   .from("written_requests")
                   .update({ admin_email_sent_at: new Date().toISOString() })
@@ -224,6 +240,8 @@ export async function POST(req: NextRequest) {
                     error: adminEmailSentAtError.message,
                   });
                 }
+
+                console.log("[WEBHOOK] DB UPDATE AFTER EMAIL DONE");
               }
             }
           } catch (emailError) {
