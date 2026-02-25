@@ -24,6 +24,7 @@ async function sendAdminEmail(request: {
   question_1: string | null;
   question_2: string | null;
   question_3: string | null;
+  calculator_snapshot?: Record<string, unknown> | null;
   calculator_results?: Record<string, unknown> | null;
 }) {
   if (!ADMIN_EMAIL_RECIPIENT) {
@@ -59,6 +60,15 @@ async function sendAdminEmail(request: {
     return trimmedValue.length > 0 ? trimmedValue : "—";
   };
 
+  const formatInputValue = (value: unknown) => {
+    if (value === null || value === undefined) return "—";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) return numericValue.toFixed(2);
+    const textValue = String(value).trim();
+    return textValue.length > 0 ? textValue : "—";
+  };
+
   const resend = new Resend(process.env.RESEND_API_KEY);
   let identityEmail = request.guest_email;
 
@@ -68,6 +78,50 @@ async function sendAdminEmail(request: {
   }
 
   const calculatorResults = (request.calculator_results ?? {}) as Record<string, unknown>;
+  const calculatorSnapshot =
+    request.calculator_snapshot && typeof request.calculator_snapshot === "object"
+      ? (request.calculator_snapshot as Record<string, unknown>)
+      : null;
+
+  const snapshotFieldDefinitions: Array<{ key: string; label: string }> = [
+    { key: "productPrice", label: "Product Price" },
+    { key: "unitsSold", label: "Units Sold" },
+    { key: "productCost", label: "Product Cost" },
+    { key: "shippingCost", label: "Shipping Cost" },
+    { key: "paymentProcessingPercent", label: "Payment Processing %" },
+    { key: "adSpend", label: "Ad Spend" },
+    { key: "vatIncluded", label: "VAT Included" },
+  ];
+
+  const snapshotRows = calculatorSnapshot
+    ? snapshotFieldDefinitions
+        .filter(({ key }) => Object.prototype.hasOwnProperty.call(calculatorSnapshot, key))
+        .map(({ key, label }) => {
+          const value = calculatorSnapshot[key];
+          return `
+            <tr>
+              <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">${label}</td>
+              <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${formatInputValue(value)}</td>
+            </tr>
+          `;
+        })
+        .join("")
+    : "";
+
+  const inputDataSectionHtml = snapshotRows
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+         <tr>
+           <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;">Input</td>
+           <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;" align="right">Value</td>
+         </tr>
+         ${snapshotRows}
+       </table>`
+    : `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+         <tr>
+           <td style="padding:10px 12px;font-size:14px;color:#6b7280;">—</td>
+         </tr>
+       </table>`;
+
   const revenueFormatted = formatTwoDecimals(calculatorResults.revenue);
   const totalCostsFormatted = formatTwoDecimals(calculatorResults.totalCosts);
   const profitFormatted = formatTwoDecimals(calculatorResults.profit);
@@ -134,26 +188,62 @@ async function sendAdminEmail(request: {
               </tr>
               <tr>
                 <td style="padding:0 24px 20px 24px;">
-                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
                     <tr>
-                      <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;">Metric</td>
-                      <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;" align="right">Value</td>
+                      <td style="font-size:14px;color:#111827;font-weight:700;padding-bottom:10px;">Data Overview</td>
                     </tr>
                     <tr>
-                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Revenue</td>
-                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${revenueFormatted}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Total Costs</td>
-                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${totalCostsFormatted}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;font-weight:700;">Profit</td>
-                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;font-weight:700;" align="right">${profitFormatted}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Margin</td>
-                      <td style="padding:10px 12px;font-size:14px;color:#166534;border-top:1px solid #e5e7eb;font-weight:700;" align="right">${marginFormatted}</td>
+                      <td>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                          <tr>
+                            <td width="50%" valign="top" style="padding-right:8px;">
+                              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                                <tr>
+                                  <td style="font-size:13px;color:#111827;font-weight:700;padding-bottom:8px;">Input Data</td>
+                                </tr>
+                                <tr>
+                                  <td>
+                                    ${inputDataSectionHtml}
+                                  </td>
+                                </tr>
+                              </table>
+                            </td>
+                            <td width="50%" valign="top" style="padding-left:8px;">
+                              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                                <tr>
+                                  <td style="font-size:13px;color:#111827;font-weight:700;padding-bottom:8px;">Results</td>
+                                </tr>
+                                <tr>
+                                  <td>
+                                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                                      <tr>
+                                        <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;">Metric</td>
+                                        <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;" align="right">Value</td>
+                                      </tr>
+                                      <tr>
+                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Revenue</td>
+                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${revenueFormatted}</td>
+                                      </tr>
+                                      <tr>
+                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Total Costs</td>
+                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${totalCostsFormatted}</td>
+                                      </tr>
+                                      <tr>
+                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;font-weight:700;">Profit</td>
+                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;font-weight:700;" align="right">${profitFormatted}</td>
+                                      </tr>
+                                      <tr>
+                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Margin</td>
+                                        <td style="padding:10px 12px;font-size:14px;color:#166534;border-top:1px solid #e5e7eb;font-weight:700;" align="right">${marginFormatted}</td>
+                                      </tr>
+                                    </table>
+                                  </td>
+                                </tr>
+                              </table>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
                     </tr>
                   </table>
                 </td>
@@ -258,7 +348,7 @@ export async function POST(req: NextRequest) {
           })
           .eq("id", writtenRequestId)
           .eq("status", "awaiting_payment")
-          .select("id, user_id, guest_email, question_1, question_2, question_3, calculator_results")
+          .select("id, user_id, guest_email, question_1, question_2, question_3, calculator_snapshot, calculator_results")
           .maybeSingle();
 
         if (updateError) {
