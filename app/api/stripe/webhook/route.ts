@@ -14,8 +14,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY as string
 );
 
-const ADMIN_EMAIL_RECIPIENT = process.env.ADMIN_EMAIL as string;
-const DEFAULT_EMAIL_FROM = "onboarding@resend.dev";
+const resendFromEmailEnv = process.env.RESEND_FROM_EMAIL?.trim();
+const adminEmailEnv = process.env.ADMIN_EMAIL?.trim();
+
+if (!resendFromEmailEnv) {
+  throw new Error("RESEND_FROM_EMAIL is not defined");
+}
+
+if (!adminEmailEnv) {
+  throw new Error("ADMIN_EMAIL is not defined");
+}
+
+const FROM_EMAIL: string = resendFromEmailEnv;
+const ADMIN_EMAIL_RECIPIENT: string = adminEmailEnv;
 
 async function sendAdminEmail(request: {
   id: string;
@@ -31,11 +42,6 @@ async function sendAdminEmail(request: {
     return;
   }
 
-  if (!ADMIN_EMAIL_RECIPIENT) {
-    console.error("[stripe-webhook] missing ADMIN_EMAIL");
-    return;
-  }
-
   const resend = new Resend(process.env.RESEND_API_KEY);
   let identityEmail = request.guest_email;
 
@@ -46,8 +52,9 @@ async function sendAdminEmail(request: {
 
   const calculatorResults = (request.calculator_results ?? {}) as Record<string, unknown>;
   const adminSendResult = await resend.emails.send({
-    from: DEFAULT_EMAIL_FROM,
+    from: FROM_EMAIL,
     to: ADMIN_EMAIL_RECIPIENT,
+    replyTo: ADMIN_EMAIL_RECIPIENT,
     subject: "New Paid Written Breakdown",
     text: [
       `request_id: ${request.id}`,
@@ -64,7 +71,18 @@ async function sendAdminEmail(request: {
   });
 
   if (adminSendResult.error) {
-    console.error("[stripe-webhook] resend error", adminSendResult.error);
+    const resendError = adminSendResult.error as {
+      statusCode?: number;
+      message?: string;
+    } | null;
+
+    console.error("[stripe-webhook] resend error", {
+      from: FROM_EMAIL,
+      to: ADMIN_EMAIL_RECIPIENT,
+      statusCode: resendError?.statusCode ?? null,
+      message: resendError?.message ?? null,
+      error: resendError,
+    });
     return;
   }
 

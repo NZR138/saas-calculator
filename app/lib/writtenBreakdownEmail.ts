@@ -18,10 +18,10 @@ export async function sendWrittenBreakdownAdminEmail(payload: EmailPayload) {
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
   const adminEmail = process.env.ADMIN_EMAIL;
-  const fromEmail = process.env.FROM_EMAIL || smtpUser;
+  const fromEmail = process.env.RESEND_FROM_EMAIL;
 
   if (!smtpHost || !smtpUser || !smtpPass || !adminEmail || !fromEmail) {
-    console.warn("Email not sent: missing SMTP or ADMIN_EMAIL configuration");
+    console.warn("Email not sent: missing SMTP, ADMIN_EMAIL or RESEND_FROM_EMAIL configuration");
     return;
   }
 
