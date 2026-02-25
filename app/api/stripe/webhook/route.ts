@@ -14,19 +14,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY as string
 );
 
-const resendFromEmailEnv = process.env.RESEND_FROM_EMAIL?.trim();
-const adminEmailEnv = process.env.ADMIN_EMAIL?.trim();
-
-if (!resendFromEmailEnv) {
-  throw new Error("RESEND_FROM_EMAIL is not defined");
-}
-
-if (!adminEmailEnv) {
-  throw new Error("ADMIN_EMAIL is not defined");
-}
-
-const FROM_EMAIL: string = resendFromEmailEnv;
-const ADMIN_EMAIL_RECIPIENT: string = adminEmailEnv;
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL?.trim();
+const ADMIN_EMAIL_RECIPIENT = process.env.ADMIN_EMAIL?.trim();
 
 async function sendAdminEmail(request: {
   id: string;
@@ -37,10 +26,38 @@ async function sendAdminEmail(request: {
   question_3: string | null;
   calculator_results?: Record<string, unknown> | null;
 }) {
+  if (!ADMIN_EMAIL_RECIPIENT) {
+    console.error("Missing ADMIN_EMAIL");
+    return;
+  }
+
+  if (!FROM_EMAIL) {
+    console.error("Missing RESEND_FROM_EMAIL");
+    return;
+  }
+
   if (!process.env.RESEND_API_KEY) {
     console.error("[stripe-webhook] missing RESEND_API_KEY");
     return;
   }
+
+  const formatTwoDecimals = (value: unknown) => {
+    if (value === null || value === undefined) return "—";
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return "—";
+    return numericValue.toFixed(2);
+  };
+
+  const formatMargin = (value: unknown) => {
+    const formattedValue = formatTwoDecimals(value);
+    if (formattedValue === "—") return "—";
+    return `${formattedValue}%`;
+  };
+
+  const safeQuestion = (value: string | null | undefined) => {
+    const trimmedValue = (value ?? "").trim();
+    return trimmedValue.length > 0 ? trimmedValue : "—";
+  };
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   let identityEmail = request.guest_email;
@@ -51,22 +68,121 @@ async function sendAdminEmail(request: {
   }
 
   const calculatorResults = (request.calculator_results ?? {}) as Record<string, unknown>;
+  const revenueFormatted = formatTwoDecimals(calculatorResults.revenue);
+  const totalCostsFormatted = formatTwoDecimals(calculatorResults.totalCosts);
+  const profitFormatted = formatTwoDecimals(calculatorResults.profit);
+  const marginFormatted = formatMargin(calculatorResults.margin);
+  const emailFormatted = (identityEmail ?? "").trim() || "—";
+  const question1Formatted = safeQuestion(request.question_1);
+  const question2Formatted = safeQuestion(request.question_2);
+  const question3Formatted = safeQuestion(request.question_3);
+  const renderedAt = new Date().toISOString();
+
   const adminSendResult = await resend.emails.send({
     from: FROM_EMAIL,
     to: ADMIN_EMAIL_RECIPIENT,
     replyTo: ADMIN_EMAIL_RECIPIENT,
     subject: "New Paid Written Breakdown",
+    html: `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f6f7fb;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;">
+        <tr>
+          <td align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+              <tr>
+                <td style="padding:20px 24px;border-bottom:1px solid #e5e7eb;">
+                  <div style="font-size:20px;line-height:28px;font-weight:700;color:#111827;">New Paid Written Breakdown</div>
+                  <div style="margin-top:10px;display:inline-block;background:#dcfce7;color:#166534;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;">PAID</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:20px 24px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                    <tr>
+                      <td style="font-size:12px;color:#6b7280;padding-bottom:6px;">Request ID</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:14px;color:#111827;font-weight:600;padding-bottom:16px;word-break:break-all;">${request.id}</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:12px;color:#6b7280;padding-bottom:6px;">User Email</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:14px;color:#111827;font-weight:600;padding-bottom:4px;">${emailFormatted}</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 24px 20px 24px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                    <tr>
+                      <td style="font-size:14px;color:#111827;font-weight:700;padding-bottom:10px;">Questions</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:14px;color:#111827;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;">1) ${question1Formatted}</td>
+                    </tr>
+                    <tr><td style="height:8px;"></td></tr>
+                    <tr>
+                      <td style="font-size:14px;color:#111827;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;">2) ${question2Formatted}</td>
+                    </tr>
+                    <tr><td style="height:8px;"></td></tr>
+                    <tr>
+                      <td style="font-size:14px;color:#111827;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;">3) ${question3Formatted}</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 24px 20px 24px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                    <tr>
+                      <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;">Metric</td>
+                      <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;" align="right">Value</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Revenue</td>
+                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${revenueFormatted}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Total Costs</td>
+                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${totalCostsFormatted}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;font-weight:700;">Profit</td>
+                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;font-weight:700;" align="right">${profitFormatted}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Margin</td>
+                      <td style="padding:10px 12px;font-size:14px;color:#166534;border-top:1px solid #e5e7eb;font-weight:700;" align="right">${marginFormatted}</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 24px;border-top:1px solid #e5e7eb;background:#fafafa;font-size:12px;line-height:18px;color:#6b7280;">
+                  This tool does not constitute financial advice.<br/>
+                  Generated at: ${renderedAt}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    `,
     text: [
+      "New Paid Written Breakdown",
+      "",
       `request_id: ${request.id}`,
-      `email: ${identityEmail ?? "N/A"}`,
-      `question_1: ${request.question_1 ?? ""}`,
-      `question_2: ${request.question_2 ?? ""}`,
-      `question_3: ${request.question_3 ?? ""}`,
-      `revenue: ${String(calculatorResults.revenue ?? "N/A")}`,
-      `totalCosts: ${String(calculatorResults.totalCosts ?? "N/A")}`,
-      `profit: ${String(calculatorResults.profit ?? "N/A")}`,
-      `margin: ${String(calculatorResults.margin ?? "N/A")}`,
+      `email: ${emailFormatted}`,
+      `question_1: ${question1Formatted}`,
+      `question_2: ${question2Formatted}`,
+      `question_3: ${question3Formatted}`,
+      `revenue: ${revenueFormatted}`,
+      `totalCosts: ${totalCostsFormatted}`,
+      `profit: ${profitFormatted}`,
+      `margin: ${marginFormatted}`,
       "Paid: YES",
+      `Generated at: ${renderedAt}`,
     ].join("\n"),
   });
 
