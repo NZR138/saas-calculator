@@ -1,11 +1,12 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import { useCalculator } from "@/app/hooks/useCalculator";
 
 function WrittenBreakdownContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { values, revenue, totalCosts, profit, margin } = useCalculator();
   const [questions, setQuestions] = useState(["", "", ""]);
@@ -319,7 +320,7 @@ function WrittenBreakdownContent() {
             {isProcessing ? "Processing…" : "Get my written breakdown (£39)"}
           </button>
           <button
-            onClick={() => window.history.back()}
+            onClick={() => router.push("/")}
             className="flex-1 rounded-md px-4 py-3 font-medium text-gray-900 hover:bg-gray-50 transition"
           >
             Maybe later
