@@ -33,9 +33,9 @@ export default function CalculatorCard() {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-6 items-start">
       {/* ================= LEFT COLUMN ================= */}
-      <div className="space-y-4 max-w-[680px]">
+      <div className="space-y-4 max-w-[520px] w-full">
         <p className="text-sm text-gray-500">
           Calculate your real profit after VAT, ads, shipping and product costs.
         </p>
@@ -90,7 +90,7 @@ export default function CalculatorCard() {
       </div>
 
       {/* ================= RIGHT COLUMN ================= */}
-      <div className="self-start sticky top-4 max-w-[520px] w-full md:justify-self-end">
+      <div className="self-start sticky top-4 max-w-[520px] w-full">
         <ResultsSection
           revenue={revenue}
           totalCosts={totalCosts}
