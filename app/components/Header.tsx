@@ -6,11 +6,10 @@ import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import LoginModal from "./LoginModal";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  CALCULATOR_MODE_EVENT,
-  CALCULATOR_MODE_STORAGE_KEY,
-  type CalculatorMode,
-} from "../hooks/useCalculatorModes";
+import type { CalculatorMode } from "../hooks/useCalculatorModes";
+
+const MODE_STORAGE_KEY = "uk-profit-calculator:current-mode";
+const MODE_CHANGE_EVENT = "uk-profit-calculator:mode-change";
 
 const MODE_LABELS: Array<{ mode: CalculatorMode; label: string }> = [
   { mode: "ecommerce", label: "E-commerce" },
@@ -100,7 +99,7 @@ export default function Header() {
       return;
     }
 
-    const storedMode = window.localStorage.getItem(CALCULATOR_MODE_STORAGE_KEY);
+    const storedMode = window.localStorage.getItem(MODE_STORAGE_KEY);
     if (
       storedMode === "ecommerce" ||
       storedMode === "vat" ||
@@ -122,16 +121,16 @@ export default function Header() {
       }
     };
 
-    window.addEventListener(CALCULATOR_MODE_EVENT, modeChangeListener);
+    window.addEventListener(MODE_CHANGE_EVENT, modeChangeListener);
     return () => {
-      window.removeEventListener(CALCULATOR_MODE_EVENT, modeChangeListener);
+      window.removeEventListener(MODE_CHANGE_EVENT, modeChangeListener);
     };
   }, [pathname]);
 
   const handleModeSwitch = (mode: CalculatorMode) => {
     setCurrentMode(mode);
-    window.localStorage.setItem(CALCULATOR_MODE_STORAGE_KEY, mode);
-    window.dispatchEvent(new CustomEvent<CalculatorMode>(CALCULATOR_MODE_EVENT, { detail: mode }));
+    window.localStorage.setItem(MODE_STORAGE_KEY, mode);
+    window.dispatchEvent(new CustomEvent<CalculatorMode>(MODE_CHANGE_EVENT, { detail: mode }));
   };
 
   const handleLogout = async () => {
