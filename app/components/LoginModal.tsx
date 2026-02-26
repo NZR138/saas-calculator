@@ -1,17 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialIsSignup?: boolean;
 }
 
-export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
+export default function LoginModal({
+  isOpen,
+  onClose,
+  initialIsSignup = false,
+}: LoginModalProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isSignup, setIsSignup] = useState(false);
+  const [isSignup, setIsSignup] = useState(initialIsSignup);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"info" | "error" | "success">(
     "info"
@@ -102,6 +107,13 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       await handleLogin();
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsSignup(initialIsSignup);
+      setMessage("");
+    }
+  }, [initialIsSignup, isOpen]);
 
   if (!isOpen) return null;
 

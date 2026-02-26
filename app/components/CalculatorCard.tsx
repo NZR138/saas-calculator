@@ -177,12 +177,40 @@ export default function CalculatorCard({
           <summary className="cursor-pointer font-medium text-gray-900">
             How this calculator works
           </summary>
-          <ul className="mt-3 list-disc pl-4 space-y-1">
-            <li>Revenue = Price × Units.</li>
-            <li>Costs include product, shipping, ads, payment fee, and VAT.</li>
-            <li>Results are estimates only.</li>
-            <li>This is not financial advice.</li>
-          </ul>
+          {isEcommerceMode ? (
+            <>
+              <p className="mt-3 font-medium text-gray-900">E-commerce calculation logic:</p>
+              <ul className="mt-2 list-disc pl-4 space-y-1">
+                <li>Revenue = Product Price × Units Sold</li>
+                <li>Net Revenue = Revenue × (1 - Refund Rate %)</li>
+                <li>Payment Processing Fee = Net Revenue × Processing %</li>
+                <li>Product Costs = Product Cost per Unit × Units</li>
+                <li>Shipping Costs = Shipping per Unit × Units</li>
+                <li>Total Costs = Product Costs + Shipping Costs + Processing Fee + Fixed Costs</li>
+                <li>Net Profit = Net Revenue − Total Costs</li>
+                <li>Margin % = Net Profit / Net Revenue</li>
+                <li>
+                  Contribution Margin per Unit = Selling Price − Product Cost − Shipping −
+                  (Selling Price × Processing %)
+                </li>
+                <li>Break-even Units = Fixed Costs / Contribution Margin per Unit</li>
+                <li>Break-even Revenue = Break-even Units × Selling Price</li>
+                <li>If Target Monthly Profit is entered:</li>
+                <li>Required Units = (Fixed Costs + Target Profit) / Contribution Margin per Unit</li>
+                <li>Required Revenue = Required Units × Selling Price</li>
+              </ul>
+              <p className="mt-3 text-xs text-gray-600">Processing is calculated from Net Revenue.</p>
+              <p className="text-xs text-gray-600">Refunds reduce revenue BEFORE fees.</p>
+              <p className="text-xs text-gray-600">
+                VAT (if enabled) is excluded from profit path unless explicitly toggled.
+              </p>
+            </>
+          ) : (
+            <ul className="mt-3 list-disc pl-4 space-y-1">
+              <li>Results are estimates only.</li>
+              <li>This is not financial advice.</li>
+            </ul>
+          )}
         </details>
       </div>
     </div>

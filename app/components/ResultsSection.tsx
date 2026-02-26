@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import EmailSnapshotModal from "./EmailSnapshotModal";
 import { ResultItem } from "./ResultItem";
+import LoginModal from "./LoginModal";
 
 interface ResultsSectionProps {
   revenue: number;
@@ -21,6 +22,29 @@ interface ResultsSectionProps {
   hasNegativeContributionMargin: boolean;
   targetMonthlyProfit: number;
 }
+
+type HistoryRow = {
+  id: string;
+  created_at: string;
+  revenue: number | null;
+  total_costs: number | null;
+  net_profit: number | null;
+  margin: number | null;
+};
+
+const currencyFormatter = new Intl.NumberFormat("en-GB", {
+  style: "currency",
+  currency: "GBP",
+  maximumFractionDigits: 2,
+});
+
+const dateFormatter = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
 const toSafeNumber = (value: unknown) => {
   const parsed = Number(value);
@@ -62,6 +86,10 @@ export function ResultsSection({
   const [isSaving, setIsSaving] = useState(false);
   const [showSnapshot, setShowSnapshot] = useState(false);
   const [voted, setVoted] = useState(false);
+  const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
 
   useEffect(() => {
     try {
@@ -112,6 +140,33 @@ export function ResultsSection({
       };
     }
   }, []);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!isLoggedIn) {
+        setHistoryRows([]);
+        return;
+      }
+
+      setIsHistoryLoading(true);
+      try {
+        const supabase = getSupabaseClient();
+        const { data } = await supabase
+          .from("snapshots")
+          .select("id, created_at, revenue, total_costs, net_profit, margin")
+          .order("created_at", { ascending: false })
+          .limit(7);
+
+        setHistoryRows((data ?? []) as HistoryRow[]);
+      } catch {
+        setHistoryRows([]);
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    };
+
+    loadHistory();
+  }, [isLoggedIn]);
 
   const handleVote = (dir: "up" | "down") => {
     if (voted) return;
