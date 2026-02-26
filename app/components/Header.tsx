@@ -5,12 +5,27 @@ import type { User } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import LoginModal from "./LoginModal";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  CALCULATOR_MODE_EVENT,
+  CALCULATOR_MODE_STORAGE_KEY,
+  type CalculatorMode,
+} from "../hooks/useCalculatorModes";
+
+const MODE_LABELS: Array<{ mode: CalculatorMode; label: string }> = [
+  { mode: "ecommerce", label: "E-commerce" },
+  { mode: "vat", label: "UK VAT Calculator" },
+  { mode: "breakeven", label: "Break-Even & ROAS Calculator" },
+  { mode: "selfemployed", label: "Self-Employed Take-Home (UK)" },
+];
 
 export default function Header() {
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [currentMode, setCurrentMode] = useState<CalculatorMode>("ecommerce");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,6 +79,61 @@ export default function Header() {
     }
   }, [showDropdown]);
 
+  useEffect(() => {
+    if (pathname === "/ecommerce") {
+      setCurrentMode("ecommerce");
+      return;
+    }
+
+    if (pathname === "/vat") {
+      setCurrentMode("vat");
+      return;
+    }
+
+    if (pathname === "/break-even-roas") {
+      setCurrentMode("breakeven");
+      return;
+    }
+
+    if (pathname === "/self-employed") {
+      setCurrentMode("selfemployed");
+      return;
+    }
+
+    const storedMode = window.localStorage.getItem(CALCULATOR_MODE_STORAGE_KEY);
+    if (
+      storedMode === "ecommerce" ||
+      storedMode === "vat" ||
+      storedMode === "breakeven" ||
+      storedMode === "selfemployed"
+    ) {
+      setCurrentMode(storedMode);
+    }
+
+    const modeChangeListener = (event: Event) => {
+      const mode = (event as CustomEvent<CalculatorMode>).detail;
+      if (
+        mode === "ecommerce" ||
+        mode === "vat" ||
+        mode === "breakeven" ||
+        mode === "selfemployed"
+      ) {
+        setCurrentMode(mode);
+      }
+    };
+
+    window.addEventListener(CALCULATOR_MODE_EVENT, modeChangeListener);
+    return () => {
+      window.removeEventListener(CALCULATOR_MODE_EVENT, modeChangeListener);
+    };
+  }, [pathname]);
+
+  const handleModeSwitch = (mode: CalculatorMode) => {
+    setCurrentMode(mode);
+    window.localStorage.setItem(CALCULATOR_MODE_STORAGE_KEY, mode);
+    window.dispatchEvent(new CustomEvent<CalculatorMode>(CALCULATOR_MODE_EVENT, { detail: mode }));
+  };
+
   const handleLogout = async () => {
     setIsLoading(true);
 
@@ -80,18 +150,27 @@ export default function Header() {
   return (
     <>
       <header className="border-b border-gray-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-gray-900">
-              UK Profit Calculator
-            </h1>
-            <nav className="flex items-center gap-2" aria-label="Calculator navigation">
-              <button
-                type="button"
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 transition hover:bg-gray-50 cursor-pointer"
-              >
-                E-commerce
-              </button>
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold text-gray-900">UK Profit Calculator</h1>
+            <nav className="mt-2 flex flex-wrap items-center gap-2" aria-label="Calculator navigation">
+              {MODE_LABELS.map((modeOption) => {
+                const isActive = currentMode === modeOption.mode;
+                return (
+                  <button
+                    key={modeOption.mode}
+                    type="button"
+                    onClick={() => handleModeSwitch(modeOption.mode)}
+                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                      isActive
+                        ? "border-black bg-black text-white"
+                        : "border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
+                    }`}
+                  >
+                    {modeOption.label}
+                  </button>
+                );
+              })}
             </nav>
           </div>
 
