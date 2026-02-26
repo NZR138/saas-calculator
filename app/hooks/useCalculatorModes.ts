@@ -9,6 +9,9 @@ export type CalculatorMode =
   | "breakeven"
   | "selfemployed";
 
+export const CALCULATOR_MODE_STORAGE_KEY = "uk-profit-calculator:current-mode";
+export const CALCULATOR_MODE_EVENT = "uk-profit-calculator:mode-change";
+
 type VatInputs = {
   netAmount: number;
   vatRate: number;
@@ -77,6 +80,7 @@ type EcommerceBridge = {
   values: CalculatorValues;
   setValue: (key: keyof CalculatorValues, value: number | boolean) => void;
   reset: () => void;
+  initialMode?: CalculatorMode;
   results: EcommerceResults;
 };
 
@@ -101,15 +105,64 @@ const DEFAULT_SELFEMPLOYED_INPUTS: SelfEmployedInputs = {
   includeNic: true,
 };
 
+const DEFAULT_ECOMMERCE_VALUES: CalculatorValues = {
+  productPrice: 0,
+  unitsSold: 0,
+  productCost: 0,
+  shippingCost: 0,
+  paymentProcessingPercent: 0,
+  adSpend: 0,
+  vatIncluded: true,
+};
+
+const DEFAULT_ECOMMERCE_RESULTS: EcommerceResults = {
+  revenue: 0,
+  totalCosts: 0,
+  vatAmount: 0,
+  profit: 0,
+  margin: 0,
+  roas: 0,
+};
+
+const FALLBACK_ECOMMERCE_BRIDGE: EcommerceBridge = {
+  values: DEFAULT_ECOMMERCE_VALUES,
+  setValue: () => {
+    return;
+  },
+  reset: () => {
+    return;
+  },
+  results: DEFAULT_ECOMMERCE_RESULTS,
+};
+
 const toSafeNumber = (value: unknown) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-export function useCalculatorModes(ecommerce: EcommerceBridge) {
-  const [currentMode, setCurrentMode] = useState<CalculatorMode>("ecommerce");
+export function useCalculatorModes(ecommerce?: EcommerceBridge) {
+  const ecommerceBridge = ecommerce ?? FALLBACK_ECOMMERCE_BRIDGE;
+
+  const [currentMode, setCurrentMode] = useState<CalculatorMode>(() => {
+    if (typeof window === "undefined") {
+      return "ecommerce";
+    }
+
+    const storedMode = window.localStorage.getItem(CALCULATOR_MODE_STORAGE_KEY);
+    if (
+      storedMode === "ecommerce" ||
+      storedMode === "vat" ||
+      storedMode === "breakeven" ||
+      storedMode === "selfemployed"
+    ) {
+      return storedMode;
+    }
+
+    return "ecommerce";
+  });
+
   const [inputsByMode, setInputsByMode] = useState<InputsByMode>({
-    ecommerce: ecommerce.values,
+    ecommerce: ecommerceBridge.values,
     vat: DEFAULT_VAT_INPUTS,
     breakeven: DEFAULT_BREAKEVEN_INPUTS,
     selfemployed: DEFAULT_SELFEMPLOYED_INPUTS,
@@ -118,9 +171,51 @@ export function useCalculatorModes(ecommerce: EcommerceBridge) {
   useEffect(() => {
     setInputsByMode((prev) => ({
       ...prev,
-      ecommerce: ecommerce.values,
+      ecommerce: ecommerceBridge.values,
     }));
-  }, [ecommerce.values]);
+  }, [ecommerceBridge.values]);
+
+  useEffect(() => {
+    if (!ecommerceBridge.initialMode) {
+      return;
+    }
+
+    setCurrentMode(ecommerceBridge.initialMode);
+  }, [ecommerceBridge.initialMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(CALCULATOR_MODE_STORAGE_KEY, currentMode);
+    window.dispatchEvent(
+      new CustomEvent<CalculatorMode>(CALCULATOR_MODE_EVENT, { detail: currentMode })
+    );
+  }, [currentMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handler = (event: Event) => {
+      const mode = (event as CustomEvent<CalculatorMode>).detail;
+      if (
+        mode === "ecommerce" ||
+        mode === "vat" ||
+        mode === "breakeven" ||
+        mode === "selfemployed"
+      ) {
+        setCurrentMode(mode);
+      }
+    };
+
+    window.addEventListener(CALCULATOR_MODE_EVENT, handler);
+    return () => {
+      window.removeEventListener(CALCULATOR_MODE_EVENT, handler);
+    };
+  }, []);
 
   const resultsByMode = useMemo<ResultsByMode>(() => {
     const vatAmountInput = toSafeNumber(inputsByMode.vat.netAmount);
@@ -208,12 +303,12 @@ export function useCalculatorModes(ecommerce: EcommerceBridge) {
     };
 
     return {
-      ecommerce: ecommerce.results,
+      ecommerce: ecommerceBridge.results,
       vat: vatResults,
       breakeven: breakEvenResults,
       selfemployed: selfEmployedResults,
     };
-  }, [ecommerce.results, inputsByMode]);
+  }, [ecommerceBridge.results, inputsByMode]);
 
   const updateVatInput = (key: keyof VatInputs, value: number | "add" | "remove") => {
     setInputsByMode((prev) => ({
@@ -250,7 +345,7 @@ export function useCalculatorModes(ecommerce: EcommerceBridge) {
 
   const resetCurrentMode = () => {
     if (currentMode === "ecommerce") {
-      ecommerce.reset();
+      ecommerceBridge.reset();
       return;
     }
 
@@ -268,6 +363,8 @@ export function useCalculatorModes(ecommerce: EcommerceBridge) {
   };
 
   return {
+    mode: currentMode,
+    setMode: setCurrentMode,
     currentMode,
     setCurrentMode,
     inputsByMode,

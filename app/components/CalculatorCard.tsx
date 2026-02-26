@@ -19,14 +19,11 @@ const currencyFormatter = new Intl.NumberFormat("en-GB", {
 const formatCurrency = (value: number) => currencyFormatter.format(value);
 const formatNumber = (value: number) => value.toFixed(2);
 
-const MODE_LABELS: Array<{ mode: CalculatorMode; label: string }> = [
-  { mode: "ecommerce", label: "E-commerce" },
-  { mode: "vat", label: "UK VAT Calculator" },
-  { mode: "breakeven", label: "Break-Even & ROAS Calculator" },
-  { mode: "selfemployed", label: "Self-Employed Take-Home (UK)" },
-];
-
-export default function CalculatorCard() {
+export default function CalculatorCard({
+  initialMode,
+}: {
+  initialMode?: CalculatorMode;
+}) {
   const {
     values,
     revenue,
@@ -40,8 +37,7 @@ export default function CalculatorCard() {
   } = useCalculator();
 
   const {
-    currentMode,
-    setCurrentMode,
+    mode,
     inputsByMode,
     resultsByMode,
     updateVatInput,
@@ -52,6 +48,7 @@ export default function CalculatorCard() {
     values,
     setValue,
     reset,
+    initialMode,
     results: {
       revenue,
       totalCosts,
@@ -65,7 +62,7 @@ export default function CalculatorCard() {
   const router = useRouter();
 
   const isValid = values.productPrice > 0 && values.unitsSold > 0;
-  const isEcommerceMode = currentMode === "ecommerce";
+  const isEcommerceMode = mode === "ecommerce";
 
   const handleCalculate = () => {
     if (!isValid) {
@@ -82,26 +79,6 @@ export default function CalculatorCard() {
         <p className="text-sm text-gray-500">
           Calculate your real profit after VAT, ads, shipping and product costs.
         </p>
-
-        <div className="flex flex-wrap gap-2">
-          {MODE_LABELS.map((modeOption) => {
-            const isActive = currentMode === modeOption.mode;
-            return (
-              <button
-                key={modeOption.mode}
-                type="button"
-                onClick={() => setCurrentMode(modeOption.mode)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                  isActive
-                    ? "border-black bg-black text-white"
-                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {modeOption.label}
-              </button>
-            );
-          })}
-        </div>
 
         <div className="bg-white rounded-2xl shadow-md p-6 space-y-6">
           <div className="flex items-center justify-between">
@@ -130,7 +107,7 @@ export default function CalculatorCard() {
             </>
           ) : (
             <ModeInputs
-              currentMode={currentMode}
+              currentMode={mode}
               inputsByMode={inputsByMode}
               updateVatInput={updateVatInput}
               updateBreakEvenInput={updateBreakEvenInput}
@@ -177,7 +154,7 @@ export default function CalculatorCard() {
             roas={roas}
           />
         ) : (
-          <ModeResults currentMode={currentMode} resultsByMode={resultsByMode} />
+          <ModeResults currentMode={mode} resultsByMode={resultsByMode} />
         )}
 
         <details className="mt-4 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">

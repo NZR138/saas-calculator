@@ -6,10 +6,7 @@ import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import LoginModal from "./LoginModal";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { CalculatorMode } from "../hooks/useCalculatorModes";
-
-const MODE_STORAGE_KEY = "uk-profit-calculator:current-mode";
-const MODE_CHANGE_EVENT = "uk-profit-calculator:mode-change";
+import { useCalculatorModes, type CalculatorMode } from "../hooks/useCalculatorModes";
 
 const MODE_LABELS: Array<{ mode: CalculatorMode; label: string }> = [
   { mode: "ecommerce", label: "E-commerce" },
@@ -24,7 +21,7 @@ export default function Header() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [currentMode, setCurrentMode] = useState<CalculatorMode>("ecommerce");
+  const { mode, setMode } = useCalculatorModes();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -80,58 +77,25 @@ export default function Header() {
 
   useEffect(() => {
     if (pathname === "/ecommerce") {
-      setCurrentMode("ecommerce");
+      setMode("ecommerce");
       return;
     }
 
     if (pathname === "/vat") {
-      setCurrentMode("vat");
+      setMode("vat");
       return;
     }
 
     if (pathname === "/break-even-roas") {
-      setCurrentMode("breakeven");
+      setMode("breakeven");
       return;
     }
 
     if (pathname === "/self-employed") {
-      setCurrentMode("selfemployed");
+      setMode("selfemployed");
       return;
     }
-
-    const storedMode = window.localStorage.getItem(MODE_STORAGE_KEY);
-    if (
-      storedMode === "ecommerce" ||
-      storedMode === "vat" ||
-      storedMode === "breakeven" ||
-      storedMode === "selfemployed"
-    ) {
-      setCurrentMode(storedMode);
-    }
-
-    const modeChangeListener = (event: Event) => {
-      const mode = (event as CustomEvent<CalculatorMode>).detail;
-      if (
-        mode === "ecommerce" ||
-        mode === "vat" ||
-        mode === "breakeven" ||
-        mode === "selfemployed"
-      ) {
-        setCurrentMode(mode);
-      }
-    };
-
-    window.addEventListener(MODE_CHANGE_EVENT, modeChangeListener);
-    return () => {
-      window.removeEventListener(MODE_CHANGE_EVENT, modeChangeListener);
-    };
-  }, [pathname]);
-
-  const handleModeSwitch = (mode: CalculatorMode) => {
-    setCurrentMode(mode);
-    window.localStorage.setItem(MODE_STORAGE_KEY, mode);
-    window.dispatchEvent(new CustomEvent<CalculatorMode>(MODE_CHANGE_EVENT, { detail: mode }));
-  };
+  }, [pathname, setMode]);
 
   const handleLogout = async () => {
     setIsLoading(true);
@@ -154,12 +118,12 @@ export default function Header() {
             <h1 className="text-lg font-semibold text-gray-900">UK Profit Calculator</h1>
             <nav className="mt-2 flex flex-wrap items-center gap-2" aria-label="Calculator navigation">
               {MODE_LABELS.map((modeOption) => {
-                const isActive = currentMode === modeOption.mode;
+                const isActive = mode === modeOption.mode;
                 return (
                   <button
                     key={modeOption.mode}
                     type="button"
-                    onClick={() => handleModeSwitch(modeOption.mode)}
+                    onClick={() => setMode(modeOption.mode)}
                     className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
                       isActive
                         ? "border-black bg-black text-white"
