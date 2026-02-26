@@ -394,16 +394,6 @@ function ModeResults({
         )}
       </div>
 
-      <div className="border-t border-gray-100 pt-4">
-        <button
-          type="button"
-          disabled
-          title="Not available yet"
-          className="rounded-lg px-3 py-2 text-xs font-semibold text-white bg-gray-400 cursor-not-allowed"
-        >
-          Save Snapshot
-        </button>
-      </div>
     </div>
   );
 }

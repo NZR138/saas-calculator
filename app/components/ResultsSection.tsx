@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import EmailSnapshotModal from "./EmailSnapshotModal";
 import { ResultItem } from "./ResultItem";
-import { useRouter } from "next/navigation";
 
 interface ResultsSectionProps {
   revenue: number;
@@ -28,7 +27,6 @@ export function ResultsSection({
   margin,
   roas,
 }: ResultsSectionProps) {
-  const router = useRouter();
   const safeRevenue = toSafeNumber(revenue);
   const safeTotalCosts = toSafeNumber(totalCosts);
   const safeVatAmount = toSafeNumber(vatAmount);
@@ -267,27 +265,6 @@ export function ResultsSection({
         <div className="border-t border-gray-100 pt-4">
           {isLoggedIn ? (
             <div className="space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveSnapshot}
-                  disabled={isSaving}
-                  className={`rounded-lg px-3 py-2 text-xs font-semibold text-white transition ${
-                    isSaving
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-black hover:bg-gray-800 cursor-pointer"
-                  }`}
-                >
-                  {isSaving ? "Saving..." : "Save Snapshot"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard")}
-                  className="rounded-lg px-3 py-2 text-xs font-semibold text-white transition bg-black hover:bg-gray-800 cursor-pointer"
-                >
-                  Dashboard
-                </button>
-              </div>
               <p className="text-xs text-gray-500">Last 7 calculations are stored</p>
               {saveMessage && (
                 <p

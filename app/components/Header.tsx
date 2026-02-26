@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import LoginModal from "./LoginModal";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCalculatorModes, type CalculatorMode } from "../hooks/useCalculatorModes";
 
@@ -15,6 +14,17 @@ const MODE_LABELS: Array<{ mode: CalculatorMode; label: string }> = [
   { mode: "selfemployed", label: "Self-Employed Take-Home (UK)" },
 ];
 
+function maskEmail(email: string) {
+  if (!email || !email.includes("@")) return email;
+
+  const [name, domain] = email.split("@");
+
+  if (!name) return email;
+
+  const visible = name.slice(0, 3);
+  return visible + "..." + "@" + domain;
+}
+
 export default function Header() {
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
@@ -23,6 +33,7 @@ export default function Header() {
   const [showDropdown, setShowDropdown] = useState(false);
   const { mode, setMode } = useCalculatorModes();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const maskedEmail = maskEmail(user?.email ?? "");
 
   useEffect(() => {
     let isMounted = true;
@@ -144,7 +155,7 @@ export default function Header() {
                   onClick={() => setShowDropdown(!showDropdown)}
                   className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
                 >
-                  <span>{user.email}</span>
+                  <span>{maskedEmail}</span>
                   <svg
                     className="w-4 h-4"
                     fill="none"
@@ -161,13 +172,6 @@ export default function Header() {
                 </button>
                 {showDropdown && (
                   <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-10">
-                    <Link
-                      href="/dashboard"
-                      onClick={() => setShowDropdown(false)}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition"
-                    >
-                      Dashboard
-                    </Link>
                     <button
                       onClick={() => {
                         handleLogout();
