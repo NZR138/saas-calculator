@@ -7,11 +7,19 @@ import { ResultItem } from "./ResultItem";
 
 interface ResultsSectionProps {
   revenue: number;
+  netRevenue: number;
   totalCosts: number;
   vatAmount: number;
   profit: number;
   margin: number;
   roas: number;
+  contributionMarginPerUnit: number;
+  breakEvenUnits: number;
+  breakEvenRevenue: number;
+  requiredRevenueForTargetProfit: number;
+  requiredUnitsForTargetProfit: number;
+  hasNegativeContributionMargin: boolean;
+  targetMonthlyProfit: number;
 }
 
 const toSafeNumber = (value: unknown) => {
@@ -21,18 +29,33 @@ const toSafeNumber = (value: unknown) => {
 
 export function ResultsSection({
   revenue,
+  netRevenue,
   totalCosts,
   vatAmount,
   profit,
   margin,
   roas,
+  contributionMarginPerUnit,
+  breakEvenUnits,
+  breakEvenRevenue,
+  requiredRevenueForTargetProfit,
+  requiredUnitsForTargetProfit,
+  hasNegativeContributionMargin,
+  targetMonthlyProfit,
 }: ResultsSectionProps) {
   const safeRevenue = toSafeNumber(revenue);
+  const safeNetRevenue = toSafeNumber(netRevenue);
   const safeTotalCosts = toSafeNumber(totalCosts);
   const safeVatAmount = toSafeNumber(vatAmount);
   const safeProfit = toSafeNumber(profit);
   const safeMargin = toSafeNumber(margin);
   const safeRoas = toSafeNumber(roas);
+  const safeContributionMarginPerUnit = toSafeNumber(contributionMarginPerUnit);
+  const safeBreakEvenUnits = toSafeNumber(breakEvenUnits);
+  const safeBreakEvenRevenue = toSafeNumber(breakEvenRevenue);
+  const safeRequiredRevenueForTargetProfit = toSafeNumber(requiredRevenueForTargetProfit);
+  const safeRequiredUnitsForTargetProfit = toSafeNumber(requiredUnitsForTargetProfit);
+  const safeTargetMonthlyProfit = toSafeNumber(targetMonthlyProfit);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveStatus, setSaveStatus] = useState<"success" | "error" | "">("");
@@ -203,6 +226,11 @@ export function ResultsSection({
             value={`£${safeRevenue.toFixed(2)}`} 
             tooltip="Total income from sales (units × price)"
           />
+          <ResultItem
+            label="Net Revenue"
+            value={`£${safeNetRevenue.toFixed(2)}`}
+            tooltip="Revenue after refund-rate adjustment"
+          />
           <ResultItem 
             label="Total Costs" 
             value={`£${safeTotalCosts.toFixed(2)}`} 
@@ -230,6 +258,38 @@ export function ResultsSection({
             value={`${safeRoas.toFixed(2)}x`}
             tooltip="Return on Ad Spend - revenue per £1 spent on ads (target: >2.5)"
           />
+          <ResultItem
+            label="Contribution Margin / Unit"
+            value={`£${safeContributionMarginPerUnit.toFixed(2)}`}
+            tooltip="Selling price minus product, shipping and processing cost per unit"
+          />
+          <ResultItem
+            label="Break-even Units"
+            value={safeBreakEvenUnits.toFixed(2)}
+            tooltip="Fixed costs divided by contribution margin per unit"
+          />
+          <ResultItem
+            label="Break-even Revenue"
+            value={`£${safeBreakEvenRevenue.toFixed(2)}`}
+            tooltip="Break-even units multiplied by selling price"
+          />
+          {safeTargetMonthlyProfit > 0 && (
+            <>
+              <ResultItem
+                label="Required Revenue (Target Profit)"
+                value={`£${safeRequiredRevenueForTargetProfit.toFixed(2)}`}
+                tooltip="Revenue needed to cover fixed costs and your target monthly profit"
+              />
+              <ResultItem
+                label="Required Units (Target Profit)"
+                value={safeRequiredUnitsForTargetProfit.toFixed(2)}
+                tooltip="Units required to reach your target monthly profit"
+              />
+            </>
+          )}
+          {hasNegativeContributionMargin && (
+            <p className="mt-2 text-xs font-medium text-red-600">Negative contribution margin</p>
+          )}
         </div>
 
         <div className="border-t border-gray-100 pt-4 text-sm">

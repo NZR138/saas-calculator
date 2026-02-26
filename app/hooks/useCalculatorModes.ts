@@ -112,6 +112,8 @@ const DEFAULT_ECOMMERCE_VALUES: CalculatorValues = {
   shippingCost: 0,
   paymentProcessingPercent: 0,
   adSpend: 0,
+  refundRate: 0,
+  targetMonthlyProfit: 0,
   vatIncluded: true,
 };
 

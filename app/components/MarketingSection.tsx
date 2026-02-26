@@ -15,10 +15,17 @@ export function MarketingSection({ values, setValue }: MarketingSectionProps) {
         Marketing
       </p>
       <NumberField
-        label="Ad Spend"
-        tooltip="Monthly paid advertising budget"
+        label="Fixed Costs (£)"
+        tooltip="Monthly fixed costs used for break-even and target-profit analysis"
         value={values.adSpend}
         onChange={(v: number) => setValue("adSpend", v)}
+        prefix="£"
+      />
+      <NumberField
+        label="Target Monthly Profit (£)"
+        tooltip="Optional target profit to calculate required revenue and units"
+        value={values.targetMonthlyProfit}
+        onChange={(v: number) => setValue("targetMonthlyProfit", v)}
         prefix="£"
       />
     </div>

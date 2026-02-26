@@ -9,6 +9,8 @@ export type CalculatorValues = {
   shippingCost: number;
   paymentProcessingPercent: number;
   adSpend: number;
+  refundRate: number;
+  targetMonthlyProfit: number;
   vatIncluded: boolean;
 };
 
@@ -19,6 +21,8 @@ const DEFAULT_VALUES: CalculatorValues = {
   shippingCost: 0,
   paymentProcessingPercent: 0,
   adSpend: 0,
+  refundRate: 0,
+  targetMonthlyProfit: 0,
   vatIncluded: true,
 };
 
@@ -55,6 +59,8 @@ export function useCalculator() {
             parsed.paymentProcessingPercent ?? parsed.paymentPercent
           ),
           adSpend: toSafeNumber(parsed.adSpend),
+          refundRate: toSafeNumber(parsed.refundRate),
+          targetMonthlyProfit: toSafeNumber(parsed.targetMonthlyProfit),
           vatIncluded:
             typeof parsed.vatIncluded === "boolean"
               ? parsed.vatIncluded
@@ -113,35 +119,76 @@ export function useCalculator() {
     const shippingCost = toSafeNumber(values.shippingCost);
     const paymentProcessingPercent = toSafeNumber(values.paymentProcessingPercent);
     const adSpend = toSafeNumber(values.adSpend);
+    const refundRate = Math.max(0, toSafeNumber(values.refundRate));
+    const targetMonthlyProfit = Math.max(0, toSafeNumber(values.targetMonthlyProfit));
 
     const revenue = productPrice * unitsSold;
 
-    const vatAmount = values.vatIncluded ? revenue * 0.2 : 0;
+    const netRevenue = revenue * (1 - refundRate / 100);
 
-    const paymentFee = revenue * (paymentProcessingPercent / 100);
+    const productCostsTotal = productCost * unitsSold;
+    const shippingCostsTotal = shippingCost * unitsSold;
+
+    const contributionMarginPerUnit =
+      productPrice -
+      productCost -
+      shippingCost -
+      (productPrice * (paymentProcessingPercent / 100));
+
+    const hasNegativeContributionMargin = contributionMarginPerUnit <= 0;
+
+    const vatAmount = values.vatIncluded ? netRevenue * 0.2 : 0;
+
+    const paymentFee = netRevenue * (paymentProcessingPercent / 100);
 
     const totalCosts =
-      productCost +
-      shippingCost +
+      productCostsTotal +
+      shippingCostsTotal +
       adSpend +
       paymentFee +
       vatAmount;
 
-    const netProfit = revenue - totalCosts;
+    const netProfit = netRevenue - totalCosts;
 
     const margin =
-      revenue > 0 ? (netProfit / revenue) * 100 : 0;
+      netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0;
 
     const roas =
-      adSpend > 0 ? revenue / adSpend : 0;
+      adSpend > 0 ? netRevenue / adSpend : 0;
+
+    const breakEvenUnits =
+      contributionMarginPerUnit > 0 ? adSpend / contributionMarginPerUnit : 0;
+
+    const breakEvenRevenue = breakEvenUnits * productPrice;
+
+    const contributionMarginRatio =
+      productPrice > 0 ? contributionMarginPerUnit / productPrice : 0;
+
+    const requiredRevenueForTargetProfit =
+      targetMonthlyProfit > 0 && contributionMarginRatio > 0
+        ? (adSpend + targetMonthlyProfit) / contributionMarginRatio
+        : 0;
+
+    const requiredUnitsForTargetProfit =
+      requiredRevenueForTargetProfit > 0 && productPrice > 0
+        ? requiredRevenueForTargetProfit / productPrice
+        : 0;
 
     return {
       revenue,
+      netRevenue,
       totalCosts,
       vatAmount,
       netProfit,
       margin,
       roas,
+      contributionMarginPerUnit,
+      breakEvenUnits,
+      breakEvenRevenue,
+      requiredRevenueForTargetProfit,
+      requiredUnitsForTargetProfit,
+      hasNegativeContributionMargin,
+      targetMonthlyProfit,
     };
   }, [values]);
 
@@ -151,10 +198,18 @@ export function useCalculator() {
     reset,
 
     revenue: calculated.revenue,
+    netRevenue: calculated.netRevenue,
     totalCosts: calculated.totalCosts,
     vatAmount: calculated.vatAmount,
     profit: calculated.netProfit,
     margin: calculated.margin,
     roas: calculated.roas,
+    contributionMarginPerUnit: calculated.contributionMarginPerUnit,
+    breakEvenUnits: calculated.breakEvenUnits,
+    breakEvenRevenue: calculated.breakEvenRevenue,
+    requiredRevenueForTargetProfit: calculated.requiredRevenueForTargetProfit,
+    requiredUnitsForTargetProfit: calculated.requiredUnitsForTargetProfit,
+    hasNegativeContributionMargin: calculated.hasNegativeContributionMargin,
+    targetMonthlyProfit: calculated.targetMonthlyProfit,
   };
 }

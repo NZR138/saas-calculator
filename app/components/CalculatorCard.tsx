@@ -27,11 +27,19 @@ export default function CalculatorCard({
   const {
     values,
     revenue,
+    netRevenue,
     totalCosts,
     vatAmount,
     profit,
     margin,
     roas,
+    contributionMarginPerUnit,
+    breakEvenUnits,
+    breakEvenRevenue,
+    requiredRevenueForTargetProfit,
+    requiredUnitsForTargetProfit,
+    hasNegativeContributionMargin,
+    targetMonthlyProfit,
     setValue,
     reset,
   } = useCalculator();
@@ -147,11 +155,19 @@ export default function CalculatorCard({
         {isEcommerceMode ? (
           <ResultsSection
             revenue={revenue}
+            netRevenue={netRevenue}
             totalCosts={totalCosts}
             vatAmount={vatAmount}
             profit={profit}
             margin={margin}
             roas={roas}
+            contributionMarginPerUnit={contributionMarginPerUnit}
+            breakEvenUnits={breakEvenUnits}
+            breakEvenRevenue={breakEvenRevenue}
+            requiredRevenueForTargetProfit={requiredRevenueForTargetProfit}
+            requiredUnitsForTargetProfit={requiredUnitsForTargetProfit}
+            hasNegativeContributionMargin={hasNegativeContributionMargin}
+            targetMonthlyProfit={targetMonthlyProfit}
           />
         ) : (
           <ModeResults currentMode={mode} resultsByMode={resultsByMode} />
