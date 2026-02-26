@@ -2,10 +2,29 @@
 
 import { useRouter } from "next/navigation";
 import { useCalculator } from "../hooks/useCalculator";
+import { useCalculatorModes, type CalculatorMode } from "../hooks/useCalculatorModes";
 import { ProductSection } from "./ProductSection";
 import { CostsSection } from "./CostsSection";
 import { MarketingSection } from "./MarketingSection";
 import { ResultsSection } from "./ResultsSection";
+import { NumberField } from "./NumberField";
+import { ResultItem } from "./ResultItem";
+
+const currencyFormatter = new Intl.NumberFormat("en-GB", {
+  style: "currency",
+  currency: "GBP",
+  maximumFractionDigits: 2,
+});
+
+const formatCurrency = (value: number) => currencyFormatter.format(value);
+const formatNumber = (value: number) => value.toFixed(2);
+
+const MODE_LABELS: Array<{ mode: CalculatorMode; label: string }> = [
+  { mode: "ecommerce", label: "E-commerce" },
+  { mode: "vat", label: "UK VAT Calculator" },
+  { mode: "breakeven", label: "Break-Even & ROAS Calculator" },
+  { mode: "selfemployed", label: "Self-Employed Take-Home (UK)" },
+];
 
 export default function CalculatorCard() {
   const {
@@ -20,9 +39,33 @@ export default function CalculatorCard() {
     reset,
   } = useCalculator();
 
+  const {
+    currentMode,
+    setCurrentMode,
+    inputsByMode,
+    resultsByMode,
+    updateVatInput,
+    updateBreakEvenInput,
+    updateSelfEmployedInput,
+    resetCurrentMode,
+  } = useCalculatorModes({
+    values,
+    setValue,
+    reset,
+    results: {
+      revenue,
+      totalCosts,
+      vatAmount,
+      profit,
+      margin,
+      roas,
+    },
+  });
+
   const router = useRouter();
 
   const isValid = values.productPrice > 0 && values.unitsSold > 0;
+  const isEcommerceMode = currentMode === "ecommerce";
 
   const handleCalculate = () => {
     if (!isValid) {
@@ -40,6 +83,26 @@ export default function CalculatorCard() {
           Calculate your real profit after VAT, ads, shipping and product costs.
         </p>
 
+        <div className="flex flex-wrap gap-2">
+          {MODE_LABELS.map((modeOption) => {
+            const isActive = currentMode === modeOption.mode;
+            return (
+              <button
+                key={modeOption.mode}
+                type="button"
+                onClick={() => setCurrentMode(modeOption.mode)}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  isActive
+                    ? "border-black bg-black text-white"
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                {modeOption.label}
+              </button>
+            );
+          })}
+        </div>
+
         <div className="bg-white rounded-2xl shadow-md p-6 space-y-6">
           <div className="flex items-center justify-between">
             <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
@@ -47,29 +110,42 @@ export default function CalculatorCard() {
             </p>
             <button
               type="button"
-              onClick={() => reset()}
+              onClick={() => resetCurrentMode()}
               className="cursor-pointer rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100 transition"
             >
               Reset
             </button>
           </div>
 
-          <ProductSection values={values} setValue={setValue} />
+          {isEcommerceMode ? (
+            <>
+              <ProductSection values={values} setValue={setValue} />
 
-          <CostsSection
-            values={values}
-            setValue={setValue}
-          />
+              <CostsSection
+                values={values}
+                setValue={setValue}
+              />
 
-          <MarketingSection values={values} setValue={setValue} />
+              <MarketingSection values={values} setValue={setValue} />
+            </>
+          ) : (
+            <ModeInputs
+              currentMode={currentMode}
+              inputsByMode={inputsByMode}
+              updateVatInput={updateVatInput}
+              updateBreakEvenInput={updateBreakEvenInput}
+              updateSelfEmployedInput={updateSelfEmployedInput}
+            />
+          )}
         </div>
 
         <button
           type="button"
-          onClick={handleCalculate}
-          disabled={!isValid}
+          onClick={isEcommerceMode ? handleCalculate : undefined}
+          disabled={isEcommerceMode ? !isValid : true}
+          title={isEcommerceMode ? undefined : "Not available yet"}
           className={`w-full rounded-xl py-3 text-sm font-semibold text-white transition ${
-            isValid
+            isEcommerceMode && isValid
               ? "bg-black hover:bg-gray-800 hover:shadow-md active:translate-y-px active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/40 focus-visible:ring-offset-2 cursor-pointer"
               : "bg-gray-300 cursor-not-allowed"
           }`}
@@ -91,14 +167,18 @@ export default function CalculatorCard() {
 
       {/* ================= RIGHT COLUMN ================= */}
       <div className="self-start sticky top-4 max-w-[520px] w-full">
-        <ResultsSection
-          revenue={revenue}
-          totalCosts={totalCosts}
-          vatAmount={vatAmount}
-          profit={profit}
-          margin={margin}
-          roas={roas}
-        />
+        {isEcommerceMode ? (
+          <ResultsSection
+            revenue={revenue}
+            totalCosts={totalCosts}
+            vatAmount={vatAmount}
+            profit={profit}
+            margin={margin}
+            roas={roas}
+          />
+        ) : (
+          <ModeResults currentMode={currentMode} resultsByMode={resultsByMode} />
+        )}
 
         <details className="mt-4 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
           <summary className="cursor-pointer font-medium text-gray-900">
@@ -111,6 +191,241 @@ export default function CalculatorCard() {
             <li>This is not financial advice.</li>
           </ul>
         </details>
+      </div>
+    </div>
+  );
+}
+
+function ModeInputs({
+  currentMode,
+  inputsByMode,
+  updateVatInput,
+  updateBreakEvenInput,
+  updateSelfEmployedInput,
+}: {
+  currentMode: Exclude<CalculatorMode, "ecommerce">;
+  inputsByMode: ReturnType<typeof useCalculatorModes>["inputsByMode"];
+  updateVatInput: ReturnType<typeof useCalculatorModes>["updateVatInput"];
+  updateBreakEvenInput: ReturnType<typeof useCalculatorModes>["updateBreakEvenInput"];
+  updateSelfEmployedInput: ReturnType<typeof useCalculatorModes>["updateSelfEmployedInput"];
+}) {
+  if (currentMode === "vat") {
+    const vatInputs = inputsByMode.vat;
+    return (
+      <div className="space-y-3">
+        <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+          VAT Inputs
+        </p>
+        <NumberField
+          label="Net amount"
+          value={vatInputs.netAmount}
+          onChange={(value) => updateVatInput("netAmount", value)}
+          prefix="£"
+        />
+        <NumberField
+          label="VAT rate"
+          value={vatInputs.vatRate}
+          onChange={(value) => updateVatInput("vatRate", value)}
+        />
+        <div className="space-y-2">
+          <p className="text-sm text-gray-700">VAT operation</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => updateVatInput("vatOperation", "add")}
+              className={`rounded-md border px-3 py-2 text-xs font-semibold transition cursor-pointer ${
+                vatInputs.vatOperation === "add"
+                  ? "border-black bg-black text-white"
+                  : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              Add VAT
+            </button>
+            <button
+              type="button"
+              onClick={() => updateVatInput("vatOperation", "remove")}
+              className={`rounded-md border px-3 py-2 text-xs font-semibold transition cursor-pointer ${
+                vatInputs.vatOperation === "remove"
+                  ? "border-black bg-black text-white"
+                  : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              Remove VAT
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentMode === "breakeven") {
+    const breakEvenInputs = inputsByMode.breakeven;
+    return (
+      <div className="space-y-3">
+        <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+          Break-Even Inputs
+        </p>
+        <NumberField
+          label="Product price"
+          value={breakEvenInputs.productPrice}
+          onChange={(value) => updateBreakEvenInput("productPrice", value)}
+          prefix="£"
+        />
+        <NumberField
+          label="Product cost"
+          value={breakEvenInputs.productCost}
+          onChange={(value) => updateBreakEvenInput("productCost", value)}
+          prefix="£"
+        />
+        <NumberField
+          label="Ad spend"
+          value={breakEvenInputs.adSpend}
+          onChange={(value) => updateBreakEvenInput("adSpend", value)}
+          prefix="£"
+        />
+        <NumberField
+          label="Payment processing %"
+          value={breakEvenInputs.paymentProcessingPercent}
+          onChange={(value) => updateBreakEvenInput("paymentProcessingPercent", value)}
+        />
+        <NumberField
+          label="Shipping cost"
+          value={breakEvenInputs.shippingCost}
+          onChange={(value) => updateBreakEvenInput("shippingCost", value)}
+          prefix="£"
+        />
+      </div>
+    );
+  }
+
+  const selfEmployedInputs = inputsByMode.selfemployed;
+  return (
+    <div className="space-y-3">
+      <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+        Self-Employed Inputs
+      </p>
+      <NumberField
+        label="Annual revenue"
+        value={selfEmployedInputs.annualRevenue}
+        onChange={(value) => updateSelfEmployedInput("annualRevenue", value)}
+        prefix="£"
+      />
+      <NumberField
+        label="Annual expenses"
+        value={selfEmployedInputs.annualExpenses}
+        onChange={(value) => updateSelfEmployedInput("annualExpenses", value)}
+        prefix="£"
+      />
+      <NumberField
+        label="Tax year"
+        value={selfEmployedInputs.taxYear}
+        onChange={(value) => updateSelfEmployedInput("taxYear", value)}
+      />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={selfEmployedInputs.includeNic}
+        onClick={() => updateSelfEmployedInput("includeNic", !selfEmployedInputs.includeNic)}
+        className="flex items-center gap-3 cursor-pointer"
+      >
+        <span
+          className={[
+            "relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full border transition-colors",
+            selfEmployedInputs.includeNic
+              ? "bg-black border-black"
+              : "bg-gray-200 border-gray-300",
+          ].join(" ")}
+        >
+          <span
+            className={[
+              "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform",
+              selfEmployedInputs.includeNic ? "translate-x-5" : "translate-x-1",
+            ].join(" ")}
+          />
+        </span>
+        <span className="text-sm text-gray-700">Include NIC</span>
+      </button>
+    </div>
+  );
+}
+
+function ModeResults({
+  currentMode,
+  resultsByMode,
+}: {
+  currentMode: Exclude<CalculatorMode, "ecommerce">;
+  resultsByMode: ReturnType<typeof useCalculatorModes>["resultsByMode"];
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">
+          Your Results
+        </h2>
+      </div>
+
+      <div>
+        {currentMode === "vat" && (
+          <>
+            <ResultItem label="VAT amount" value={formatCurrency(resultsByMode.vat.vatAmount)} />
+            <ResultItem label="Gross amount" value={formatCurrency(resultsByMode.vat.grossAmount)} />
+            <ResultItem label="Net amount" value={formatCurrency(resultsByMode.vat.netAmount)} />
+          </>
+        )}
+
+        {currentMode === "breakeven" && (
+          <>
+            <ResultItem
+              label="Break-even units"
+              value={formatNumber(resultsByMode.breakeven.breakEvenUnits)}
+            />
+            <ResultItem
+              label="Break-even revenue"
+              value={formatCurrency(resultsByMode.breakeven.breakEvenRevenue)}
+            />
+            <ResultItem
+              label="Required ROAS"
+              value={`${formatNumber(resultsByMode.breakeven.requiredRoas)}x`}
+            />
+            <ResultItem
+              label="Net margin"
+              value={`${formatNumber(resultsByMode.breakeven.netMargin)}%`}
+            />
+          </>
+        )}
+
+        {currentMode === "selfemployed" && (
+          <>
+            <ResultItem
+              label="Taxable profit"
+              value={formatCurrency(resultsByMode.selfemployed.taxableProfit)}
+            />
+            <ResultItem
+              label="Estimated income tax"
+              value={formatCurrency(resultsByMode.selfemployed.estimatedIncomeTax)}
+            />
+            <ResultItem
+              label="National Insurance"
+              value={formatCurrency(resultsByMode.selfemployed.nationalInsurance)}
+            />
+            <ResultItem
+              label="Estimated take-home"
+              value={formatCurrency(resultsByMode.selfemployed.estimatedTakeHome)}
+              highlight
+            />
+          </>
+        )}
+      </div>
+
+      <div className="border-t border-gray-100 pt-4">
+        <button
+          type="button"
+          disabled
+          title="Not available yet"
+          className="rounded-lg px-3 py-2 text-xs font-semibold text-white bg-gray-400 cursor-not-allowed"
+        >
+          Save Snapshot
+        </button>
       </div>
     </div>
   );
