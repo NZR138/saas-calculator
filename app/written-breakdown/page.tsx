@@ -8,7 +8,23 @@ import { useCalculator } from "@/app/hooks/useCalculator";
 function WrittenBreakdownContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { values, revenue, totalCosts, profit, margin } = useCalculator();
+  const {
+    values,
+    revenue,
+    netRevenue,
+    totalCosts,
+    vatAmount,
+    profit,
+    margin,
+    roas,
+    contributionMarginPerUnit,
+    breakEvenUnits,
+    breakEvenRevenue,
+    requiredRevenueForTargetProfit,
+    requiredUnitsForTargetProfit,
+    hasNegativeContributionMargin,
+    targetMonthlyProfit,
+  } = useCalculator();
   const [questions, setQuestions] = useState(["", "", ""]);
   const [userEmail, setUserEmail] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
@@ -145,15 +161,46 @@ function WrittenBreakdownContent() {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
 
-      // build calculator snapshot safely
-      const calculatorSnapshot = values ?? null;
+      const hasTargetProfit = Number(targetMonthlyProfit) > 0;
 
-      const calculatorResults = {
-        revenue: revenue ?? null,
-        totalCosts: totalCosts ?? null,
-        profit: profit ?? null,
-        margin: margin ?? null,
+      const calculatorSnapshot = {
+        kind: "ecommerce",
+        inputs: {
+          productPrice: values.productPrice,
+          unitsSold: values.unitsSold,
+          productCostPerUnit: values.productCost,
+          shippingCostPerUnit: values.shippingCost,
+          paymentProcessingPercent: values.paymentProcessingPercent,
+          refundRatePercent: values.refundRate,
+          adSpend: values.adSpend,
+          fixedCosts: values.adSpend,
+          vatIncluded: values.vatIncluded,
+          targetMonthlyProfit: hasTargetProfit ? targetMonthlyProfit : null,
+        },
+        results: {
+          revenue,
+          netRevenue,
+          totalCosts,
+          vatAmount,
+          netProfit: profit,
+          marginPercent: margin,
+          roas,
+          contributionMarginPerUnit,
+          breakEvenUnits,
+          breakEvenRevenue,
+          requiredUnitsForTargetProfit: hasTargetProfit
+            ? requiredUnitsForTargetProfit
+            : null,
+          requiredRevenueForTargetProfit: hasTargetProfit
+            ? requiredRevenueForTargetProfit
+            : null,
+          negativeContributionMargin: hasNegativeContributionMargin,
+        },
       };
+
+      const calculatorResults = calculatorSnapshot.results;
+
+      console.log("UI SNAPSHOT:", calculatorSnapshot);
 
       const response = await fetch("/api/stripe/checkout-session", {
         method: "POST",

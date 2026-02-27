@@ -7,8 +7,16 @@ let supabaseClient: SupabaseClient | null = null
 export function getSupabaseClient(): SupabaseClient {
   if (supabaseClient) return supabaseClient
 
-  const supabaseUrl = "https://bwtrrphotmhuilkxbxuq.supabase.co"
-  const supabaseAnonKey = "sb_publishable_KVQVzrj712-OEXwvxC3xxQ_kY90Vur4"
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL")
+  }
+
+  if (!supabaseAnonKey) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  }
 
   supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
 

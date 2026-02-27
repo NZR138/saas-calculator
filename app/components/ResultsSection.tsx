@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
-import EmailSnapshotModal from "./EmailSnapshotModal";
 import { ResultItem } from "./ResultItem";
 import LoginModal from "./LoginModal";
 
@@ -81,10 +80,6 @@ export function ResultsSection({
   const safeRequiredUnitsForTargetProfit = toSafeNumber(requiredUnitsForTargetProfit);
   const safeTargetMonthlyProfit = toSafeNumber(targetMonthlyProfit);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [saveMessage, setSaveMessage] = useState("");
-  const [saveStatus, setSaveStatus] = useState<"success" | "error" | "">("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSnapshot, setShowSnapshot] = useState(false);
   const [voted, setVoted] = useState(false);
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -185,82 +180,9 @@ export function ResultsSection({
     }
   };
 
-  const handleSaveSnapshot = async () => {
-    if (isSaving) return;
-    setSaveMessage("");
-    setSaveStatus("");
-    setIsSaving(true);
-
-    try {
-      const supabase = getSupabaseClient();
-
-      const { data } = await supabase.auth.getUser();
-      const user = data.user;
-
-      if (!user) {
-        setSaveStatus("error");
-        setSaveMessage("You must be logged in to save.");
-        setIsSaving(false);
-        return;
-      }
-
-      const payload = {
-        user_id: user.id,
-        revenue: safeRevenue,
-        total_costs: safeTotalCosts,
-        vat: safeVatAmount,
-        net_profit: safeProfit,
-        margin: safeMargin,
-        roas: safeRoas,
-      };
-
-      const numericPayloadValues = [
-        payload.revenue,
-        payload.total_costs,
-        payload.vat,
-        payload.net_profit,
-        payload.margin,
-        payload.roas,
-      ];
-
-      if (numericPayloadValues.some((value) => !Number.isFinite(value))) {
-        console.error("Snapshot payload contains invalid numeric values", payload);
-        setSaveStatus("error");
-        setSaveMessage("Unable to save snapshot.");
-        return;
-      }
-
-      const { error } = await supabase.from("snapshots").insert([payload]);
-
-      if (error) {
-        setSaveStatus("error");
-        setSaveMessage("Unable to save snapshot.");
-        return;
-      }
-
-      const { data: oldSnapshots } = await supabase
-        .from("snapshots")
-        .select("id")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .range(7, 1000);
-
-      const oldIds = (oldSnapshots ?? [])
-        .map((snapshot) => snapshot.id)
-        .filter((id): id is string => typeof id === "string");
-
-      if (oldIds.length > 0) {
-        await supabase.from("snapshots").delete().in("id", oldIds);
-      }
-
-      setSaveStatus("success");
-      setSaveMessage("Snapshot saved");
-    } catch {
-      setSaveStatus("error");
-      setSaveMessage("Unable to save snapshot");
-    } finally {
-      setIsSaving(false);
-    }
+  const openAuthModal = (mode: "signin" | "signup" = "signin") => {
+    setAuthMode(mode);
+    setIsAuthModalOpen(true);
   };
 
   return (
@@ -280,11 +202,6 @@ export function ResultsSection({
             label="Revenue" 
             value={`£${safeRevenue.toFixed(2)}`} 
             tooltip="Total income from sales (units × price)"
-          />
-          <ResultItem
-            label="Net Revenue"
-            value={`£${safeNetRevenue.toFixed(2)}`}
-            tooltip="Revenue after refund-rate adjustment"
           />
           <ResultItem 
             label="Total Costs" 
@@ -313,37 +230,68 @@ export function ResultsSection({
             value={`${safeRoas.toFixed(2)}x`}
             tooltip="Return on Ad Spend - revenue per £1 spent on ads (target: >2.5)"
           />
-          <ResultItem
-            label="Contribution Margin / Unit"
-            value={`£${safeContributionMarginPerUnit.toFixed(2)}`}
-            tooltip="Selling price minus product, shipping and processing cost per unit"
-          />
-          <ResultItem
-            label="Break-even Units"
-            value={safeBreakEvenUnits.toFixed(2)}
-            tooltip="Fixed costs divided by contribution margin per unit"
-          />
-          <ResultItem
-            label="Break-even Revenue"
-            value={`£${safeBreakEvenRevenue.toFixed(2)}`}
-            tooltip="Break-even units multiplied by selling price"
-          />
-          {safeTargetMonthlyProfit > 0 && (
+          {isLoggedIn ? (
             <>
               <ResultItem
-                label="Required Revenue (Target Profit)"
-                value={`£${safeRequiredRevenueForTargetProfit.toFixed(2)}`}
-                tooltip="Revenue needed to cover fixed costs and your target monthly profit"
+                label="Net Revenue"
+                value={`£${safeNetRevenue.toFixed(2)}`}
+                tooltip="Revenue after refund-rate adjustment"
               />
               <ResultItem
-                label="Required Units (Target Profit)"
-                value={safeRequiredUnitsForTargetProfit.toFixed(2)}
-                tooltip="Units required to reach your target monthly profit"
+                label="Contribution Margin / Unit"
+                value={`£${safeContributionMarginPerUnit.toFixed(2)}`}
+                tooltip="Selling price minus product, shipping and processing cost per unit"
               />
+              <ResultItem
+                label="Break-even Units"
+                value={safeBreakEvenUnits.toFixed(2)}
+                tooltip="Fixed costs divided by contribution margin per unit"
+              />
+              <ResultItem
+                label="Break-even Revenue"
+                value={`£${safeBreakEvenRevenue.toFixed(2)}`}
+                tooltip="Break-even units multiplied by selling price"
+              />
+              {safeTargetMonthlyProfit > 0 && (
+                <>
+                  <ResultItem
+                    label="Required Revenue (Target Profit)"
+                    value={`£${safeRequiredRevenueForTargetProfit.toFixed(2)}`}
+                    tooltip="Revenue needed to cover fixed costs and your target monthly profit"
+                  />
+                  <ResultItem
+                    label="Required Units (Target Profit)"
+                    value={safeRequiredUnitsForTargetProfit.toFixed(2)}
+                    tooltip="Units required to reach your target monthly profit"
+                  />
+                </>
+              )}
+              {hasNegativeContributionMargin && (
+                <p className="mt-2 text-xs font-medium text-red-600">Negative contribution margin</p>
+              )}
             </>
-          )}
-          {hasNegativeContributionMargin && (
-            <p className="mt-2 text-xs font-medium text-red-600">Negative contribution margin</p>
+          ) : (
+            <div className="space-y-2 pt-1">
+              {[
+                "Net Revenue",
+                "Contribution Margin / Unit",
+                "Break-even Units",
+                "Break-even Revenue",
+                "Required Revenue (Target Profit)",
+                "Required Units (Target Profit)",
+              ].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => openAuthModal("signin")}
+                  className="w-full flex items-center justify-between py-2 border-b border-gray-100 text-left hover:bg-gray-50"
+                  title="Log in to unlock"
+                >
+                  <span className="text-sm text-gray-500">{label} · Log in to unlock</span>
+                  <span className="text-gray-400">—</span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
@@ -380,30 +328,74 @@ export function ResultsSection({
         <div className="border-t border-gray-100 pt-4">
           {isLoggedIn ? (
             <div className="space-y-2">
-              <p className="text-xs text-gray-500">Last 7 calculations are stored</p>
-              {saveMessage && (
-                <p
-                  className={`text-xs ${
-                    saveStatus === "success" ? "text-green-600" : "text-red-500"
-                  }`}
-                >
-                  {saveMessage}
-                </p>
+              <p className="text-xs font-medium text-gray-700">Calculation history</p>
+              {isHistoryLoading ? (
+                <p className="text-xs text-gray-500">Loading history...</p>
+              ) : historyRows.length === 0 ? (
+                <p className="text-xs text-gray-500">No saved calculations yet.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-md border border-gray-200">
+                  <table className="min-w-full text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-2 py-2 text-left font-semibold text-gray-700">Date</th>
+                        <th className="px-2 py-2 text-right font-semibold text-gray-700">Revenue</th>
+                        <th className="px-2 py-2 text-right font-semibold text-gray-700">Profit</th>
+                        <th className="px-2 py-2 text-right font-semibold text-gray-700">Margin</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {historyRows.map((row) => (
+                        <tr key={row.id}>
+                          <td className="px-2 py-2 text-gray-700">
+                            {dateFormatter.format(new Date(row.created_at))}
+                          </td>
+                          <td className="px-2 py-2 text-right text-gray-900">
+                            {currencyFormatter.format(toSafeNumber(row.revenue))}
+                          </td>
+                          <td className="px-2 py-2 text-right text-gray-900">
+                            {currencyFormatter.format(toSafeNumber(row.net_profit))}
+                          </td>
+                          <td className="px-2 py-2 text-right text-gray-900">
+                            {toSafeNumber(row.margin).toFixed(2)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           ) : (
-            <p className="text-xs text-gray-500">Log in to save your results.</p>
+            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-center">
+              <p className="text-sm text-gray-700">Sign in to save and view your calculation history</p>
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openAuthModal("signin")}
+                  className="rounded-md bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition"
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuthModal("signup")}
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
+                >
+                  Sign Up
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
       </div>
 
-      {showSnapshot && (
-        <EmailSnapshotModal
-          snapshot={{ revenue: safeRevenue, profit: safeProfit, margin: safeMargin, roas: safeRoas }}
-          onClose={() => setShowSnapshot(false)}
-        />
-      )}
+      <LoginModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialIsSignup={authMode === "signup"}
+      />
     </>
   );
 }

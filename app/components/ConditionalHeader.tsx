@@ -5,6 +5,10 @@ import Header from "./Header";
 
 const HEADER_PATHS = new Set([
   "/",
+  "/ecommerce",
+  "/vat",
+  "/break-even-roas",
+  "/self-employed",
   "/calculator",
   "/dashboard",
   "/terms",

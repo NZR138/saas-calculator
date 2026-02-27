@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import ConditionalHeader from './components/ConditionalHeader';
 import ConditionalFooter from './components/ConditionalFooter';
+import { assertCriticalEnvInDevelopment } from './lib/envValidation';
 declare global {
   interface Window {
     plausible?: (event: string, options?: Record<string, unknown>) => void;
@@ -18,6 +19,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  assertCriticalEnvInDevelopment();
+
   return (
     <html lang="en">
       <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">

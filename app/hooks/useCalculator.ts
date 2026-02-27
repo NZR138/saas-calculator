@@ -144,9 +144,8 @@ export function useCalculator() {
     const totalCosts =
       productCostsTotal +
       shippingCostsTotal +
-      adSpend +
       paymentFee +
-      vatAmount;
+      adSpend;
 
     const netProfit = netRevenue - totalCosts;
 
@@ -161,17 +160,14 @@ export function useCalculator() {
 
     const breakEvenRevenue = breakEvenUnits * productPrice;
 
-    const contributionMarginRatio =
-      productPrice > 0 ? contributionMarginPerUnit / productPrice : 0;
-
-    const requiredRevenueForTargetProfit =
-      targetMonthlyProfit > 0 && contributionMarginRatio > 0
-        ? (adSpend + targetMonthlyProfit) / contributionMarginRatio
+    const requiredUnitsForTargetProfit =
+      targetMonthlyProfit > 0 && contributionMarginPerUnit > 0
+        ? (adSpend + targetMonthlyProfit) / contributionMarginPerUnit
         : 0;
 
-    const requiredUnitsForTargetProfit =
-      requiredRevenueForTargetProfit > 0 && productPrice > 0
-        ? requiredRevenueForTargetProfit / productPrice
+    const requiredRevenueForTargetProfit =
+      requiredUnitsForTargetProfit > 0 && productPrice > 0
+        ? requiredUnitsForTargetProfit * productPrice
         : 0;
 
     return {

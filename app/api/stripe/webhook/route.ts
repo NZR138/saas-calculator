@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { assertCriticalEnvInDevelopment } from "@/app/lib/envValidation";
 
 export const runtime = "nodejs";
+
+assertCriticalEnvInDevelopment();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
   apiVersion: "2026-01-28.clover",
@@ -17,7 +20,42 @@ const supabase = createClient(
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL?.trim();
 const ADMIN_EMAIL_RECIPIENT = process.env.ADMIN_EMAIL?.trim();
 
-async function sendAdminEmail(request: {
+type SnapshotInputs = {
+  productPrice: number | null;
+  unitsSold: number | null;
+  productCostPerUnit: number | null;
+  shippingCostPerUnit: number | null;
+  paymentProcessingPercent: number | null;
+  refundRatePercent: number | null;
+  adSpend: number | null;
+  fixedCosts: number | null;
+  vatIncluded: boolean | null;
+  targetMonthlyProfit: number | null;
+};
+
+type SnapshotResults = {
+  revenue: number | null;
+  netRevenue: number | null;
+  totalCosts: number | null;
+  vatAmount: number | null;
+  netProfit: number | null;
+  marginPercent: number | null;
+  roas: number | null;
+  contributionMarginPerUnit: number | null;
+  breakEvenUnits: number | null;
+  breakEvenRevenue: number | null;
+  requiredUnitsForTargetProfit: number | null;
+  requiredRevenueForTargetProfit: number | null;
+  negativeContributionMargin: boolean | null;
+};
+
+type CanonicalSnapshot = {
+  kind: "ecommerce";
+  inputs: SnapshotInputs;
+  results: SnapshotResults;
+};
+
+type PersistedRequest = {
   id: string;
   user_id: string | null;
   guest_email: string | null;
@@ -26,7 +64,266 @@ async function sendAdminEmail(request: {
   question_3: string | null;
   calculator_snapshot?: Record<string, unknown> | null;
   calculator_results?: Record<string, unknown> | null;
-}) {
+};
+
+type SendAdminEmailPayload = PersistedRequest & {
+  fallbackEmail?: string | null;
+  metadata?: Stripe.Metadata | null;
+  snapshotSource?: "db" | "metadata";
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function toNullableBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "1" || normalized === "true" || normalized === "yes") return true;
+    if (normalized === "0" || normalized === "false" || normalized === "no") return false;
+  }
+  return null;
+}
+
+function parseMetadataSnapshot(metadata?: Stripe.Metadata | null): CanonicalSnapshot | null {
+  if (!metadata || metadata.snapshot_kind !== "ecommerce") {
+    return null;
+  }
+
+  return {
+    kind: "ecommerce",
+    inputs: {
+      productPrice: toNullableNumber(metadata.s_i_pp),
+      unitsSold: toNullableNumber(metadata.s_i_us),
+      productCostPerUnit: toNullableNumber(metadata.s_i_pcpu),
+      shippingCostPerUnit: toNullableNumber(metadata.s_i_scpu),
+      paymentProcessingPercent: toNullableNumber(metadata.s_i_ppp),
+      refundRatePercent: toNullableNumber(metadata.s_i_rrp),
+      adSpend: toNullableNumber(metadata.s_i_ads),
+      fixedCosts: toNullableNumber(metadata.s_i_fix),
+      vatIncluded: toNullableBoolean(metadata.s_i_vat),
+      targetMonthlyProfit: toNullableNumber(metadata.s_i_tmp),
+    },
+    results: {
+      revenue: toNullableNumber(metadata.s_r_rev),
+      netRevenue: toNullableNumber(metadata.s_r_nrev),
+      totalCosts: toNullableNumber(metadata.s_r_tcs),
+      vatAmount: toNullableNumber(metadata.s_r_vat),
+      netProfit: toNullableNumber(metadata.s_r_np),
+      marginPercent: toNullableNumber(metadata.s_r_mp),
+      roas: toNullableNumber(metadata.s_r_roas),
+      contributionMarginPerUnit: toNullableNumber(metadata.s_r_cm),
+      breakEvenUnits: toNullableNumber(metadata.s_r_beu),
+      breakEvenRevenue: toNullableNumber(metadata.s_r_ber),
+      requiredUnitsForTargetProfit: toNullableNumber(metadata.s_r_rut),
+      requiredRevenueForTargetProfit: toNullableNumber(metadata.s_r_rrt),
+      negativeContributionMargin: toNullableBoolean(metadata.s_r_ncm),
+    },
+  };
+}
+
+function buildCanonicalSnapshot(
+  snapshot: Record<string, unknown> | null | undefined,
+  results: Record<string, unknown> | null | undefined,
+  metadata?: Stripe.Metadata | null
+): CanonicalSnapshot {
+  const metadataSnapshot = parseMetadataSnapshot(metadata);
+
+  const snapshotRecord = asRecord(snapshot);
+  const nestedInputs = asRecord(snapshotRecord?.inputs);
+  const nestedResults = asRecord(snapshotRecord?.results);
+  const resultsRecord = asRecord(results);
+
+  const legacyInputs = snapshotRecord;
+
+  const canonicalSnapshot: CanonicalSnapshot = {
+    kind: "ecommerce",
+    inputs: {
+      productPrice:
+        toNullableNumber(nestedInputs?.productPrice) ??
+        toNullableNumber(legacyInputs?.productPrice) ??
+        metadataSnapshot?.inputs.productPrice ??
+        null,
+      unitsSold:
+        toNullableNumber(nestedInputs?.unitsSold) ??
+        toNullableNumber(legacyInputs?.unitsSold) ??
+        metadataSnapshot?.inputs.unitsSold ??
+        null,
+      productCostPerUnit:
+        toNullableNumber(nestedInputs?.productCostPerUnit) ??
+        toNullableNumber(legacyInputs?.productCostPerUnit) ??
+        toNullableNumber(legacyInputs?.productCost) ??
+        metadataSnapshot?.inputs.productCostPerUnit ??
+        null,
+      shippingCostPerUnit:
+        toNullableNumber(nestedInputs?.shippingCostPerUnit) ??
+        toNullableNumber(legacyInputs?.shippingCostPerUnit) ??
+        toNullableNumber(legacyInputs?.shippingCost) ??
+        metadataSnapshot?.inputs.shippingCostPerUnit ??
+        null,
+      paymentProcessingPercent:
+        toNullableNumber(nestedInputs?.paymentProcessingPercent) ??
+        toNullableNumber(legacyInputs?.paymentProcessingPercent) ??
+        metadataSnapshot?.inputs.paymentProcessingPercent ??
+        null,
+      refundRatePercent:
+        toNullableNumber(nestedInputs?.refundRatePercent) ??
+        toNullableNumber(legacyInputs?.refundRatePercent) ??
+        toNullableNumber(legacyInputs?.refundRate) ??
+        metadataSnapshot?.inputs.refundRatePercent ??
+        null,
+      adSpend:
+        toNullableNumber(nestedInputs?.adSpend) ??
+        toNullableNumber(legacyInputs?.adSpend) ??
+        metadataSnapshot?.inputs.adSpend ??
+        null,
+      fixedCosts:
+        toNullableNumber(nestedInputs?.fixedCosts) ??
+        toNullableNumber(legacyInputs?.fixedCosts) ??
+        toNullableNumber(legacyInputs?.adSpend) ??
+        metadataSnapshot?.inputs.fixedCosts ??
+        null,
+      vatIncluded:
+        toNullableBoolean(nestedInputs?.vatIncluded) ??
+        toNullableBoolean(legacyInputs?.vatIncluded) ??
+        metadataSnapshot?.inputs.vatIncluded ??
+        null,
+      targetMonthlyProfit:
+        toNullableNumber(nestedInputs?.targetMonthlyProfit) ??
+        toNullableNumber(legacyInputs?.targetMonthlyProfit) ??
+        metadataSnapshot?.inputs.targetMonthlyProfit ??
+        null,
+    },
+    results: {
+      revenue:
+        toNullableNumber(nestedResults?.revenue) ??
+        toNullableNumber(resultsRecord?.revenue) ??
+        metadataSnapshot?.results.revenue ??
+        null,
+      netRevenue:
+        toNullableNumber(nestedResults?.netRevenue) ??
+        toNullableNumber(resultsRecord?.netRevenue) ??
+        metadataSnapshot?.results.netRevenue ??
+        null,
+      totalCosts:
+        toNullableNumber(nestedResults?.totalCosts) ??
+        toNullableNumber(resultsRecord?.totalCosts) ??
+        metadataSnapshot?.results.totalCosts ??
+        null,
+      vatAmount:
+        toNullableNumber(nestedResults?.vatAmount) ??
+        toNullableNumber(resultsRecord?.vatAmount) ??
+        metadataSnapshot?.results.vatAmount ??
+        null,
+      netProfit:
+        toNullableNumber(nestedResults?.netProfit) ??
+        toNullableNumber(resultsRecord?.netProfit) ??
+        toNullableNumber(resultsRecord?.profit) ??
+        metadataSnapshot?.results.netProfit ??
+        null,
+      marginPercent:
+        toNullableNumber(nestedResults?.marginPercent) ??
+        toNullableNumber(resultsRecord?.marginPercent) ??
+        toNullableNumber(resultsRecord?.margin) ??
+        metadataSnapshot?.results.marginPercent ??
+        null,
+      roas:
+        toNullableNumber(nestedResults?.roas) ??
+        toNullableNumber(resultsRecord?.roas) ??
+        metadataSnapshot?.results.roas ??
+        null,
+      contributionMarginPerUnit:
+        toNullableNumber(nestedResults?.contributionMarginPerUnit) ??
+        toNullableNumber(resultsRecord?.contributionMarginPerUnit) ??
+        metadataSnapshot?.results.contributionMarginPerUnit ??
+        null,
+      breakEvenUnits:
+        toNullableNumber(nestedResults?.breakEvenUnits) ??
+        toNullableNumber(resultsRecord?.breakEvenUnits) ??
+        metadataSnapshot?.results.breakEvenUnits ??
+        null,
+      breakEvenRevenue:
+        toNullableNumber(nestedResults?.breakEvenRevenue) ??
+        toNullableNumber(resultsRecord?.breakEvenRevenue) ??
+        metadataSnapshot?.results.breakEvenRevenue ??
+        null,
+      requiredUnitsForTargetProfit:
+        toNullableNumber(nestedResults?.requiredUnitsForTargetProfit) ??
+        toNullableNumber(resultsRecord?.requiredUnitsForTargetProfit) ??
+        metadataSnapshot?.results.requiredUnitsForTargetProfit ??
+        null,
+      requiredRevenueForTargetProfit:
+        toNullableNumber(nestedResults?.requiredRevenueForTargetProfit) ??
+        toNullableNumber(resultsRecord?.requiredRevenueForTargetProfit) ??
+        metadataSnapshot?.results.requiredRevenueForTargetProfit ??
+        null,
+      negativeContributionMargin:
+        toNullableBoolean(nestedResults?.negativeContributionMargin) ??
+        toNullableBoolean(resultsRecord?.negativeContributionMargin) ??
+        toNullableBoolean(resultsRecord?.hasNegativeContributionMargin) ??
+        metadataSnapshot?.results.negativeContributionMargin ??
+        null,
+    },
+  };
+
+  return canonicalSnapshot;
+}
+
+function safeQuestion(value: string | null | undefined) {
+  const trimmedValue = (value ?? "").trim();
+  return trimmedValue.length > 0 ? trimmedValue : "—";
+}
+
+function formatMoney(value: number | null) {
+  if (value === null) return "—";
+  return `£${value.toFixed(2)}`;
+}
+
+function formatPercent(value: number | null) {
+  if (value === null) return "—";
+  return `${value.toFixed(2)}%`;
+}
+
+function formatUnits(value: number | null) {
+  if (value === null) return "—";
+  return value.toFixed(2);
+}
+
+function formatBoolean(value: boolean | null) {
+  if (value === null) return "—";
+  return value ? "Yes" : "No";
+}
+
+function formatRoas(value: number | null) {
+  if (value === null) return "—";
+  return `${value.toFixed(2)}x`;
+}
+
+function buildTableRows(rows: Array<{ label: string; value: string }>) {
+  return rows
+    .map(
+      ({ label, value }) => `
+        <tr>
+          <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">${label}</td>
+          <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${value}</td>
+        </tr>
+      `
+    )
+    .join("");
+}
+
+async function sendAdminEmail(request: SendAdminEmailPayload) {
   if (!ADMIN_EMAIL_RECIPIENT) {
     console.error("Missing ADMIN_EMAIL");
     return;
@@ -42,94 +339,92 @@ async function sendAdminEmail(request: {
     return;
   }
 
-  const formatTwoDecimals = (value: unknown) => {
-    if (value === null || value === undefined) return "—";
-    const numericValue = Number(value);
-    if (!Number.isFinite(numericValue)) return "—";
-    return numericValue.toFixed(2);
-  };
-
-  const formatMargin = (value: unknown) => {
-    const formattedValue = formatTwoDecimals(value);
-    if (formattedValue === "—") return "—";
-    return `${formattedValue}%`;
-  };
-
-  const safeQuestion = (value: string | null | undefined) => {
-    const trimmedValue = (value ?? "").trim();
-    return trimmedValue.length > 0 ? trimmedValue : "—";
-  };
-
-  const formatInputValue = (value: unknown) => {
-    if (value === null || value === undefined) return "—";
-    if (typeof value === "boolean") return value ? "Yes" : "No";
-    const numericValue = Number(value);
-    if (Number.isFinite(numericValue)) return numericValue.toFixed(2);
-    const textValue = String(value).trim();
-    return textValue.length > 0 ? textValue : "—";
-  };
-
   const resend = new Resend(process.env.RESEND_API_KEY);
-  let identityEmail = request.guest_email;
+  let identityEmail = request.guest_email ?? request.fallbackEmail ?? null;
 
   if (!identityEmail && request.user_id) {
     const { data: userData } = await supabase.auth.admin.getUserById(request.user_id);
     identityEmail = userData.user?.email ?? null;
   }
 
-  const calculatorResults = (request.calculator_results ?? {}) as Record<string, unknown>;
-  const calculatorSnapshot =
-    request.calculator_snapshot && typeof request.calculator_snapshot === "object"
-      ? (request.calculator_snapshot as Record<string, unknown>)
-      : null;
+  const snapshot = buildCanonicalSnapshot(
+    request.calculator_snapshot,
+    request.calculator_results,
+    request.metadata
+  );
 
-  const snapshotFieldDefinitions: Array<{ key: string; label: string }> = [
-    { key: "productPrice", label: "Product Price" },
-    { key: "unitsSold", label: "Units Sold" },
-    { key: "productCost", label: "Product Cost" },
-    { key: "shippingCost", label: "Shipping Cost" },
-    { key: "paymentProcessingPercent", label: "Payment Processing %" },
-    { key: "adSpend", label: "Ad Spend" },
-    { key: "vatIncluded", label: "VAT Included" },
-  ];
+  console.log("[WEBHOOK] SNAPSHOT SOURCE:", request.snapshotSource ?? "unknown");
+  console.log("EMAIL SNAPSHOT:", snapshot);
 
-  const snapshotRows = calculatorSnapshot
-    ? snapshotFieldDefinitions
-        .filter(({ key }) => Object.prototype.hasOwnProperty.call(calculatorSnapshot, key))
-        .map(({ key, label }) => {
-          const value = calculatorSnapshot[key];
-          return `
-            <tr>
-              <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">${label}</td>
-              <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${formatInputValue(value)}</td>
-            </tr>
-          `;
-        })
-        .join("")
-    : "";
+  const targetProfitEnabled =
+    snapshot.inputs.targetMonthlyProfit !== null && snapshot.inputs.targetMonthlyProfit > 0;
 
-  const inputDataSectionHtml = snapshotRows
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-         <tr>
-           <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;">Input</td>
-           <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;" align="right">Value</td>
-         </tr>
-         ${snapshotRows}
-       </table>`
-    : `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-         <tr>
-           <td style="padding:10px 12px;font-size:14px;color:#6b7280;">—</td>
-         </tr>
-       </table>`;
+  const inputRows = buildTableRows([
+    { label: "Product Price", value: formatMoney(snapshot.inputs.productPrice) },
+    { label: "Units Sold", value: formatUnits(snapshot.inputs.unitsSold) },
+    { label: "Product Cost / Unit", value: formatMoney(snapshot.inputs.productCostPerUnit) },
+    { label: "Shipping Cost / Unit", value: formatMoney(snapshot.inputs.shippingCostPerUnit) },
+    {
+      label: "Payment Processing %",
+      value: formatPercent(snapshot.inputs.paymentProcessingPercent),
+    },
+    { label: "Refund Rate %", value: formatPercent(snapshot.inputs.refundRatePercent) },
+    { label: "Fixed Costs", value: formatMoney(snapshot.inputs.fixedCosts) },
+    { label: "VAT Included", value: formatBoolean(snapshot.inputs.vatIncluded) },
+    ...(targetProfitEnabled
+      ? [
+          {
+            label: "Target Monthly Profit",
+            value: formatMoney(snapshot.inputs.targetMonthlyProfit),
+          },
+        ]
+      : []),
+  ]);
 
-  const revenueFormatted = formatTwoDecimals(calculatorResults.revenue);
-  const totalCostsFormatted = formatTwoDecimals(calculatorResults.totalCosts);
-  const profitFormatted = formatTwoDecimals(calculatorResults.profit);
-  const marginFormatted = formatMargin(calculatorResults.margin);
+  const resultRows = buildTableRows([
+    { label: "Revenue", value: formatMoney(snapshot.results.revenue) },
+    { label: "Net Revenue", value: formatMoney(snapshot.results.netRevenue) },
+    { label: "Total Costs", value: formatMoney(snapshot.results.totalCosts) },
+    { label: "VAT", value: formatMoney(snapshot.results.vatAmount) },
+    { label: "Net Profit", value: formatMoney(snapshot.results.netProfit) },
+    { label: "Margin %", value: formatPercent(snapshot.results.marginPercent) },
+    { label: "ROAS", value: formatRoas(snapshot.results.roas) },
+    {
+      label: "Contribution Margin / Unit",
+      value: formatMoney(snapshot.results.contributionMarginPerUnit),
+    },
+    { label: "Break-even Units", value: formatUnits(snapshot.results.breakEvenUnits) },
+    { label: "Break-even Revenue", value: formatMoney(snapshot.results.breakEvenRevenue) },
+    ...(targetProfitEnabled
+      ? [
+          {
+            label: "Required Units (Target Profit)",
+            value: formatUnits(snapshot.results.requiredUnitsForTargetProfit),
+          },
+          {
+            label: "Required Revenue (Target Profit)",
+            value: formatMoney(snapshot.results.requiredRevenueForTargetProfit),
+          },
+        ]
+      : []),
+    ...(snapshot.results.negativeContributionMargin === true
+      ? [
+          {
+            label: "Negative Contribution Margin",
+            value: "Yes",
+          },
+        ]
+      : []),
+  ]);
+
   const emailFormatted = (identityEmail ?? "").trim() || "—";
-  const question1Formatted = safeQuestion(request.question_1);
-  const question2Formatted = safeQuestion(request.question_2);
-  const question3Formatted = safeQuestion(request.question_3);
+  const metadata = request.metadata ?? null;
+  const question1Formatted =
+    safeQuestion(request.question_1) !== "—" ? safeQuestion(request.question_1) : safeQuestion(metadata?.q1);
+  const question2Formatted =
+    safeQuestion(request.question_2) !== "—" ? safeQuestion(request.question_2) : safeQuestion(metadata?.q2);
+  const question3Formatted =
+    safeQuestion(request.question_3) !== "—" ? safeQuestion(request.question_3) : safeQuestion(metadata?.q3);
   const renderedAt = new Date().toISOString();
 
   const adminSendResult = await resend.emails.send({
@@ -203,7 +498,13 @@ async function sendAdminEmail(request: {
                                 </tr>
                                 <tr>
                                   <td>
-                                    ${inputDataSectionHtml}
+                                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                                      <tr>
+                                        <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;">Input</td>
+                                        <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;" align="right">Value</td>
+                                      </tr>
+                                      ${inputRows}
+                                    </table>
                                   </td>
                                 </tr>
                               </table>
@@ -220,22 +521,7 @@ async function sendAdminEmail(request: {
                                         <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;">Metric</td>
                                         <td style="padding:10px 12px;font-size:12px;color:#6b7280;background:#f9fafb;" align="right">Value</td>
                                       </tr>
-                                      <tr>
-                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Revenue</td>
-                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${revenueFormatted}</td>
-                                      </tr>
-                                      <tr>
-                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Total Costs</td>
-                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;" align="right">${totalCostsFormatted}</td>
-                                      </tr>
-                                      <tr>
-                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;font-weight:700;">Profit</td>
-                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;font-weight:700;" align="right">${profitFormatted}</td>
-                                      </tr>
-                                      <tr>
-                                        <td style="padding:10px 12px;font-size:14px;color:#111827;border-top:1px solid #e5e7eb;">Margin</td>
-                                        <td style="padding:10px 12px;font-size:14px;color:#166534;border-top:1px solid #e5e7eb;font-weight:700;" align="right">${marginFormatted}</td>
-                                      </tr>
+                                      ${resultRows}
                                     </table>
                                   </td>
                                 </tr>
@@ -267,10 +553,27 @@ async function sendAdminEmail(request: {
       `question_1: ${question1Formatted}`,
       `question_2: ${question2Formatted}`,
       `question_3: ${question3Formatted}`,
-      `revenue: ${revenueFormatted}`,
-      `totalCosts: ${totalCostsFormatted}`,
-      `profit: ${profitFormatted}`,
-      `margin: ${marginFormatted}`,
+      `revenue: ${formatMoney(snapshot.results.revenue)}`,
+      `netRevenue: ${formatMoney(snapshot.results.netRevenue)}`,
+      `totalCosts: ${formatMoney(snapshot.results.totalCosts)}`,
+      `vatAmount: ${formatMoney(snapshot.results.vatAmount)}`,
+      `netProfit: ${formatMoney(snapshot.results.netProfit)}`,
+      `marginPercent: ${formatPercent(snapshot.results.marginPercent)}`,
+      `roas: ${formatRoas(snapshot.results.roas)}`,
+      `contributionMarginPerUnit: ${formatMoney(snapshot.results.contributionMarginPerUnit)}`,
+      `breakEvenUnits: ${formatUnits(snapshot.results.breakEvenUnits)}`,
+      `breakEvenRevenue: ${formatMoney(snapshot.results.breakEvenRevenue)}`,
+      `requiredUnitsForTargetProfit: ${
+        targetProfitEnabled
+          ? formatUnits(snapshot.results.requiredUnitsForTargetProfit)
+          : "—"
+      }`,
+      `requiredRevenueForTargetProfit: ${
+        targetProfitEnabled
+          ? formatMoney(snapshot.results.requiredRevenueForTargetProfit)
+          : "—"
+      }`,
+      `negativeContributionMargin: ${formatBoolean(snapshot.results.negativeContributionMargin)}`,
       "Paid: YES",
       `Generated at: ${renderedAt}`,
     ].join("\n"),
@@ -289,10 +592,7 @@ async function sendAdminEmail(request: {
       message: resendError?.message ?? null,
       error: resendError,
     });
-    return;
   }
-
-  console.log("[WEBHOOK] EMAIL SENT");
 }
 
 export async function POST(req: NextRequest) {
@@ -326,12 +626,6 @@ export async function POST(req: NextRequest) {
             ? session.payment_intent
             : null;
 
-        console.log("[WEBHOOK] checkout.session.completed", {
-          writtenRequestId,
-          stripeSessionId: session.id,
-          paymentIntentId,
-        });
-
         if (!writtenRequestId) {
           console.error("[WEBHOOK] missing written_request_id; skipping", {
             stripeSessionId: session.id,
@@ -340,7 +634,11 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        const { data: updatedRequest, error: updateError } = await supabase
+        let shouldSendEmail = false;
+        let updateErrorMessage: string | null = null;
+        let updatedRequest: PersistedRequest | null = null;
+
+        const updateResult = await supabase
           .from("written_requests")
           .update({
             status: "paid",
@@ -351,30 +649,89 @@ export async function POST(req: NextRequest) {
           .select("id, user_id, guest_email, question_1, question_2, question_3, calculator_snapshot, calculator_results")
           .maybeSingle();
 
-        if (updateError) {
+        if (updateResult.error) {
+          updateErrorMessage = updateResult.error.message;
+          shouldSendEmail = true;
           console.error("[WEBHOOK] DB UPDATE ERROR", {
             writtenRequestId,
             paymentIntentId,
-            error: updateError.message,
+            error: updateResult.error.message,
           });
-          break;
+        } else if (updateResult.data) {
+          updatedRequest = updateResult.data as PersistedRequest;
+          shouldSendEmail = true;
         }
 
         if (!updatedRequest) {
-          console.log("[WEBHOOK] no rows updated — skipping email", {
-            writtenRequestId,
-            paymentIntentId,
-          });
+          const { data: existingRequest } = await supabase
+            .from("written_requests")
+            .select("id, user_id, guest_email, question_1, question_2, question_3, calculator_snapshot, calculator_results")
+            .eq("id", writtenRequestId)
+            .maybeSingle();
+
+          if (existingRequest) {
+            updatedRequest = existingRequest as PersistedRequest;
+          }
+        }
+
+        if (!shouldSendEmail) {
           break;
         }
 
-        console.log("[WEBHOOK] DB UPDATE SUCCESS", {
-          writtenRequestId,
-          paymentIntentId,
-          updated: true,
+        const fallbackRequest: PersistedRequest = {
+          id: writtenRequestId,
+          user_id:
+            typeof session.metadata?.user_id === "string" && session.metadata.user_id !== "null"
+              ? session.metadata.user_id
+              : null,
+          guest_email: null,
+          question_1: null,
+          question_2: null,
+          question_3: null,
+          calculator_snapshot: null,
+          calculator_results: null,
+        };
+
+        const dbSnapshot = updatedRequest?.calculator_snapshot ?? null;
+        const dbResults = updatedRequest?.calculator_results ?? null;
+        console.log("DB SNAPSHOT:", dbSnapshot);
+
+        const metadataSnapshotObject = parseMetadataSnapshot(session.metadata ?? null);
+        const snapshotFromMetadata = metadataSnapshotObject
+          ? JSON.stringify(metadataSnapshotObject)
+          : null;
+
+        console.log("METADATA SNAPSHOT LENGTH:", snapshotFromMetadata?.length);
+        console.log("METADATA SNAPSHOT RAW:", snapshotFromMetadata);
+
+        const hasDbSnapshot =
+          Boolean(dbSnapshot && typeof dbSnapshot === "object") ||
+          Boolean(dbResults && typeof dbResults === "object");
+
+        console.log(
+          "[WEBHOOK] SNAPSHOT PATH:",
+          hasDbSnapshot ? "DB_FIRST" : "METADATA_FALLBACK"
+        );
+
+        await sendAdminEmail({
+          ...(updatedRequest ?? fallbackRequest),
+          calculator_snapshot: hasDbSnapshot ? dbSnapshot : null,
+          calculator_results: hasDbSnapshot ? dbResults : null,
+          fallbackEmail:
+            updatedRequest?.guest_email ??
+            session.customer_details?.email ??
+            (typeof session.customer_email === "string" ? session.customer_email : null),
+          metadata: session.metadata ?? null,
+          snapshotSource: hasDbSnapshot ? "db" : "metadata",
         });
 
-        await sendAdminEmail(updatedRequest);
+        if (updateErrorMessage) {
+          console.error("[WEBHOOK] Email sent with metadata fallback due to DB error", {
+            writtenRequestId,
+            error: updateErrorMessage,
+          });
+        }
+
         break;
       }
 

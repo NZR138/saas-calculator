@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAppBaseUrl } from "@/app/lib/stripeServer";
+import { assertCriticalEnvInDevelopment } from "@/app/lib/envValidation";
 import {
   getSupabaseAdminClient,
   getUserFromAccessToken,
 } from "@/app/lib/serverSupabase";
 
 export const runtime = "nodejs";
+
+assertCriticalEnvInDevelopment();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-01-28.clover",
@@ -216,6 +219,9 @@ export async function POST(request: Request) {
     const metadata: Stripe.MetadataParam = {
       written_request_id: String(writtenRequestId),
       user_id: authenticatedUser?.id ?? "null",
+      q1: question1,
+      q2: question2,
+      q3: question3,
     };
 
     if (!authenticatedUser?.id && guestEmail) {
