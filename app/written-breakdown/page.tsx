@@ -368,7 +368,7 @@ function WrittenBreakdownContent() {
           </button>
           <button
             onClick={() => router.push("/")}
-            className="flex-1 rounded-md px-4 py-3 font-medium text-gray-900 hover:bg-gray-50 transition"
+            className="flex-1 rounded-md px-4 py-3 font-medium text-gray-900 hover:bg-gray-50 transition cursor-pointer"
           >
             Maybe later
           </button>

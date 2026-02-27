@@ -208,7 +208,7 @@ export function ResultsSection({
               <button
                 type="button"
                 onClick={() => openAuthModal("signin")}
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-medium text-gray-700 hover:bg-gray-100 transition"
+                className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-medium text-gray-700 hover:bg-gray-100 hover:border-gray-300 transition cursor-pointer"
               >
                 Log in to unlock advanced metrics
               </button>

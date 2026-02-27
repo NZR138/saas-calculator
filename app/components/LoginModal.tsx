@@ -191,7 +191,7 @@ export default function LoginModal({
                   setMessage("");
                 }}
                 disabled={isLoading}
-                className="font-semibold text-black hover:underline disabled:opacity-50"
+                className="font-semibold text-black hover:underline disabled:opacity-50 cursor-pointer"
               >
                 {isSignup ? "Log in" : "Sign up"}
               </button>
@@ -202,7 +202,7 @@ export default function LoginModal({
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            className="mt-4 w-full text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50"
+            className="mt-4 w-full text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50 cursor-pointer"
           >
             Close
           </button>

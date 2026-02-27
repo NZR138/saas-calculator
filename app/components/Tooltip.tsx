@@ -9,7 +9,7 @@ type TooltipProps = {
 export default function Tooltip({ content }: TooltipProps) {
   const [open, setOpen] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const ref = useRef<HTMLSpanElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   type MsNavigator = Navigator & { msMaxTouchPoints?: number };
 
@@ -38,20 +38,26 @@ export default function Tooltip({ content }: TooltipProps) {
   }, [open, isTouchDevice]);
 
   return (
-    <span
+    <div
       ref={ref}
       className="relative inline-flex items-center ml-1"
       onMouseEnter={() => !isTouchDevice && setOpen(true)}
       onMouseLeave={() => !isTouchDevice && setOpen(false)}
-      onClick={() => isTouchDevice && setOpen(!open)}
     >
-      <span className="text-gray-400 cursor-help">ⓘ</span>
+      <button
+        type="button"
+        onClick={() => isTouchDevice && setOpen(!open)}
+        className="text-gray-400 hover:text-gray-500 transition cursor-pointer"
+        aria-label="Show tooltip"
+      >
+        ⓘ
+      </button>
 
       {open && (
         <span className="absolute z-50 bottom-full mb-2 w-64 rounded-lg bg-gray-900 text-white text-xs p-3 shadow-lg">
           {content}
         </span>
       )}
-    </span>
+    </div>
   );
 }
