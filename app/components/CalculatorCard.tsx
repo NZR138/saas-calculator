@@ -201,7 +201,7 @@ export default function CalculatorCard({
               </ul>
               <p className="mt-3 text-xs text-gray-600">Processing is calculated from Net Revenue.</p>
               <p className="text-xs text-gray-600">Refunds reduce revenue BEFORE fees.</p>
-              <p className="text-xs text-gray-600">Advanced metrics and saved snapshots are available after login.</p>
+              <p className="text-xs text-gray-600">Log in to unlock all advanced metrics. The calculator is completely free.</p>
               <p className="text-xs text-gray-600">
                 VAT (if enabled) is excluded from profit path unless explicitly toggled.
               </p>
