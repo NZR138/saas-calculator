@@ -11,6 +11,9 @@ const FOOTER_PATHS = new Set([
   "/self-employed",
   "/calculator",
   "/dashboard",
+  "/terms",
+  "/privacy",
+  "/disclaimer",
 ]);
 
 export default function ConditionalFooter() {
