@@ -285,6 +285,15 @@ function safeQuestion(value: string | null | undefined) {
   return trimmedValue.length > 0 ? trimmedValue : "—";
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function formatMoney(value: number | null) {
   if (value === null) return "—";
   return `£${value.toFixed(2)}`;
@@ -352,9 +361,6 @@ async function sendAdminEmail(request: SendAdminEmailPayload) {
     request.calculator_results,
     request.metadata
   );
-
-  console.log("[WEBHOOK] SNAPSHOT SOURCE:", request.snapshotSource ?? "unknown");
-  console.log("EMAIL SNAPSHOT:", snapshot);
 
   const targetProfitEnabled =
     snapshot.inputs.targetMonthlyProfit !== null && snapshot.inputs.targetMonthlyProfit > 0;
@@ -426,6 +432,11 @@ async function sendAdminEmail(request: SendAdminEmailPayload) {
   const question3Formatted =
     safeQuestion(request.question_3) !== "—" ? safeQuestion(request.question_3) : safeQuestion(metadata?.q3);
   const renderedAt = new Date().toISOString();
+  const escapedRequestId = escapeHtml(request.id);
+  const escapedEmail = escapeHtml(emailFormatted);
+  const escapedQuestion1 = escapeHtml(question1Formatted);
+  const escapedQuestion2 = escapeHtml(question2Formatted);
+  const escapedQuestion3 = escapeHtml(question3Formatted);
 
   const adminSendResult = await resend.emails.send({
     from: FROM_EMAIL,
@@ -450,13 +461,13 @@ async function sendAdminEmail(request: SendAdminEmailPayload) {
                       <td style="font-size:12px;color:#6b7280;padding-bottom:6px;">Request ID</td>
                     </tr>
                     <tr>
-                      <td style="font-size:14px;color:#111827;font-weight:600;padding-bottom:16px;word-break:break-all;">${request.id}</td>
+                      <td style="font-size:14px;color:#111827;font-weight:600;padding-bottom:16px;word-break:break-all;">${escapedRequestId}</td>
                     </tr>
                     <tr>
                       <td style="font-size:12px;color:#6b7280;padding-bottom:6px;">User Email</td>
                     </tr>
                     <tr>
-                      <td style="font-size:14px;color:#111827;font-weight:600;padding-bottom:4px;">${emailFormatted}</td>
+                      <td style="font-size:14px;color:#111827;font-weight:600;padding-bottom:4px;">${escapedEmail}</td>
                     </tr>
                   </table>
                 </td>
@@ -468,15 +479,15 @@ async function sendAdminEmail(request: SendAdminEmailPayload) {
                       <td style="font-size:14px;color:#111827;font-weight:700;padding-bottom:10px;">Questions</td>
                     </tr>
                     <tr>
-                      <td style="font-size:14px;color:#111827;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;">1) ${question1Formatted}</td>
+                      <td style="font-size:14px;color:#111827;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;">1) ${escapedQuestion1}</td>
                     </tr>
                     <tr><td style="height:8px;"></td></tr>
                     <tr>
-                      <td style="font-size:14px;color:#111827;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;">2) ${question2Formatted}</td>
+                      <td style="font-size:14px;color:#111827;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;">2) ${escapedQuestion2}</td>
                     </tr>
                     <tr><td style="height:8px;"></td></tr>
                     <tr>
-                      <td style="font-size:14px;color:#111827;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;">3) ${question3Formatted}</td>
+                      <td style="font-size:14px;color:#111827;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;">3) ${escapedQuestion3}</td>
                     </tr>
                   </table>
                 </td>
@@ -694,24 +705,10 @@ export async function POST(req: NextRequest) {
 
         const dbSnapshot = updatedRequest?.calculator_snapshot ?? null;
         const dbResults = updatedRequest?.calculator_results ?? null;
-        console.log("DB SNAPSHOT:", dbSnapshot);
-
-        const metadataSnapshotObject = parseMetadataSnapshot(session.metadata ?? null);
-        const snapshotFromMetadata = metadataSnapshotObject
-          ? JSON.stringify(metadataSnapshotObject)
-          : null;
-
-        console.log("METADATA SNAPSHOT LENGTH:", snapshotFromMetadata?.length);
-        console.log("METADATA SNAPSHOT RAW:", snapshotFromMetadata);
 
         const hasDbSnapshot =
           Boolean(dbSnapshot && typeof dbSnapshot === "object") ||
           Boolean(dbResults && typeof dbResults === "object");
-
-        console.log(
-          "[WEBHOOK] SNAPSHOT PATH:",
-          hasDbSnapshot ? "DB_FIRST" : "METADATA_FALLBACK"
-        );
 
         await sendAdminEmail({
           ...(updatedRequest ?? fallbackRequest),

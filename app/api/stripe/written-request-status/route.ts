@@ -1,10 +1,29 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/app/lib/serverSupabase";
+import { checkRateLimit } from "@/app/lib/rateLimit";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
+    const rateLimitResult = checkRateLimit(request, {
+      keyPrefix: "written-request-status",
+      limit: 60,
+      windowMs: 60_000,
+    });
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { paid: false, status: "awaiting_payment" },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil(rateLimitResult.retryAfterMs / 1000)),
+          },
+        }
+      );
+    }
+
     const url = new URL(request.url);
     const requestId = url.searchParams.get("request_id")?.trim();
     const sessionId = url.searchParams.get("session_id")?.trim();

@@ -200,8 +200,6 @@ function WrittenBreakdownContent() {
 
       const calculatorResults = calculatorSnapshot.results;
 
-      console.log("UI SNAPSHOT:", calculatorSnapshot);
-
       const response = await fetch("/api/stripe/checkout-session", {
         method: "POST",
         headers: {

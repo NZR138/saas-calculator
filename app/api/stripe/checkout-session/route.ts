@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAppBaseUrl } from "@/app/lib/stripeServer";
 import { assertCriticalEnvInDevelopment } from "@/app/lib/envValidation";
+import { checkRateLimit } from "@/app/lib/rateLimit";
 import {
   getSupabaseAdminClient,
   getUserFromAccessToken,
@@ -42,6 +43,24 @@ function sanitizeQuestion(value: unknown) {
 
 export async function POST(request: Request) {
   try {
+    const rateLimitResult = checkRateLimit(request, {
+      keyPrefix: "checkout-session",
+      limit: 20,
+      windowMs: 60_000,
+    });
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again shortly." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil(rateLimitResult.retryAfterMs / 1000)),
+          },
+        }
+      );
+    }
+
     const requestOrigin = new URL(request.url).origin;
 
     const body = (await request.json()) as CheckoutRequestBody;
