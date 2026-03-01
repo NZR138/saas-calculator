@@ -4,9 +4,9 @@ import CalculatorCard from "./components/CalculatorCard";
 import { buildCalculatorMetadata } from "./lib/seo";
 
 export const metadata: Metadata = buildCalculatorMetadata({
-  title: "UK Profit Calculator — real profit after VAT, ads and costs",
+  title: "UK Profit Calculator – Real Business Profit After VAT & Costs",
   description:
-    "UK Profit Calculator helps you calculate real monthly profit after VAT, advertising spend and fixed costs. No spreadsheets, no guesswork.",
+    "Free UK Profit Calculator for eCommerce & small businesses. Calculate real profit after VAT, ads, fees and costs.",
   canonicalPath: "/",
   appName: "UK E-commerce Profit Calculator",
 });

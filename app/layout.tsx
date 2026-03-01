@@ -38,9 +38,10 @@ declare global {
   }
 }
 export const metadata: Metadata = {
-  title: 'UK Profit Calculator — real profit after VAT, ads and costs',
+  metadataBase: new URL('https://ukprofit.co.uk'),
+  title: 'UK Profit Calculator – Real Business Profit After VAT & Costs',
   description:
-    'UK Profit Calculator helps you calculate real monthly profit after VAT, advertising spend and fixed costs. No spreadsheets, no guesswork.',
+    'Free UK Profit Calculator for eCommerce & small businesses. Calculate real profit after VAT, ads, fees and costs.',
 };
 export default function RootLayout({
   children,

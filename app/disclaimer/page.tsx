@@ -1,3 +1,14 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Disclaimer | UK Profit Calculator",
+  description:
+    "Important disclaimer for UK Profit Calculator: estimates only, not financial, tax, or legal advice.",
+  alternates: {
+    canonical: "/disclaimer",
+  },
+};
+
 export default function DisclaimerPage() {
   return (
     <main className="min-h-screen bg-gray-50">

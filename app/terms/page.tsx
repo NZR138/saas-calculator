@@ -1,3 +1,14 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Terms of Use | UK Profit Calculator",
+  description:
+    "Read the Terms of Use for UK Profit Calculator, including service scope, liability limits, refunds, and governing law.",
+  alternates: {
+    canonical: "/terms",
+  },
+};
+
 export default function TermsPage() {
   return (
     <main className="min-h-screen bg-gray-50">

@@ -1,3 +1,14 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy | UK Profit Calculator",
+  description:
+    "Review how UK Profit Calculator collects, stores, and processes personal data in line with UK GDPR and the Data Protection Act 2018.",
+  alternates: {
+    canonical: "/privacy",
+  },
+};
+
 export default function PrivacyPage() {
   return (
     <main className="min-h-screen bg-gray-50">
