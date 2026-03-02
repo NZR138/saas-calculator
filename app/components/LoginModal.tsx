@@ -76,21 +76,34 @@ export default function LoginModal({
     try {
       const supabase = getSupabaseClient();
 
-      const { error } = await supabase.auth.signUp({
+      const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
       });
 
-      if (error) {
+      if (signUpError) {
         setMessageType("error");
-        setMessage(error.message);
+        setMessage(signUpError.message);
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        setMessageType("error");
+        setMessage(signInError.message);
         return;
       }
 
       setMessageType("success");
-      setMessage("Check your email to confirm your account.");
+      setMessage("Account created and logged in successfully");
       setEmail("");
       setPassword("");
+      setIsSignup(false);
+      setTimeout(() => onClose(), 500);
     } catch {
       setMessageType("error");
       setMessage("Authentication failed");
