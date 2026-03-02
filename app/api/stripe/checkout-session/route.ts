@@ -12,9 +12,11 @@ export const runtime = "nodejs";
 
 assertCriticalEnvInDevelopment();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-01-28.clover",
-});
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+    apiVersion: "2023-10-16" as Stripe.LatestApiVersion,
+  });
+}
 
 type CheckoutRequestBody = {
   mode?: "draft" | "checkout";
@@ -43,6 +45,8 @@ function sanitizeQuestion(value: unknown) {
 
 export async function POST(request: Request) {
   try {
+    const stripe = getStripe();
+
     const rateLimitResult = checkRateLimit(request, {
       keyPrefix: "checkout-session",
       limit: 20,

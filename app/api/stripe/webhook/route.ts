@@ -8,9 +8,11 @@ export const runtime = "nodejs";
 
 assertCriticalEnvInDevelopment();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: "2026-01-28.clover",
-});
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+    apiVersion: "2026-01-28.clover",
+  });
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL as string,
@@ -607,6 +609,8 @@ async function sendAdminEmail(request: SendAdminEmailPayload) {
 }
 
 export async function POST(req: NextRequest) {
+  const stripe = getStripe();
+
   const body = await req.text();
   const signature = req.headers.get("stripe-signature") as string;
 
