@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import CalculatorCard from "../components/CalculatorCard";
 
 export const metadata: Metadata = {
-  title: "UK VAT Profit Calculator – Calculate Real Business Margin",
+  title: "Calculator",
   description:
     "Calculate your real UK business profit after VAT, Stripe fees, ads and shipping.",
   alternates: {
