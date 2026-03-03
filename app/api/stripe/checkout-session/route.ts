@@ -28,6 +28,7 @@ type CheckoutRequestBody = {
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const WRITTEN_BREAKDOWN_AMOUNT_CENTS = 3900;
 
 function parseBearerToken(headerValue: string | null) {
   if (!headerValue) return undefined;
@@ -196,6 +197,7 @@ export async function POST(request: Request) {
       question_3: question3,
       status: "awaiting_payment" as const,
       paid: false,
+      expected_amount_cents: WRITTEN_BREAKDOWN_AMOUNT_CENTS,
       calculator_snapshot: calculatorSnapshot,
       calculator_results: calculatorResults,
     };
@@ -259,7 +261,7 @@ export async function POST(request: Request) {
           quantity: 1,
           price_data: {
             currency: "gbp",
-            unit_amount: 3900,
+            unit_amount: WRITTEN_BREAKDOWN_AMOUNT_CENTS,
             product_data: {
               name: "Written Breakdown",
             },

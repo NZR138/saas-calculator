@@ -64,6 +64,11 @@ type PersistedRequest = {
   question_1: string | null;
   question_2: string | null;
   question_3: string | null;
+  status?: string | null;
+  paid?: boolean | null;
+  stripe_session_id?: string | null;
+  payment_intent_id?: string | null;
+  expected_amount_cents?: number | null;
   calculator_snapshot?: Record<string, unknown> | null;
   calculator_results?: Record<string, unknown> | null;
 };
@@ -725,13 +730,19 @@ export async function POST(req: NextRequest) {
 
   const eventLinkage = extractWebhookLinkage(event);
 
-  console.info(`[WEBHOOK] received event_id=${event.id}, type=${event.type}`);
+  console.info("webhook_received", {
+    event_id: event.id,
+    type: event.type,
+  });
 
   try {
     const claimResult = await claimWebhookEvent(event, eventLinkage);
 
     if (!claimResult.claimed) {
-      console.info(`[WEBHOOK] duplicate event ignored event_id=${event.id}, type=${event.type}`);
+      console.info("webhook_ignored_duplicate", {
+        event_id: event.id,
+        type: event.type,
+      });
       return NextResponse.json({ received: true, duplicate: true });
     }
   } catch (claimError) {
@@ -758,53 +769,107 @@ export async function POST(req: NextRequest) {
             : null;
 
         if (!writtenRequestId) {
-          console.error("[WEBHOOK] missing written_request_id; skipping", {
-            stripeSessionId: session.id,
-            paymentIntentId,
+          console.info("webhook_ignored_missing_request", {
+            event_id: event.id,
+            type: event.type,
+            reason: "missing_request_id",
+            session_id: session.id,
           });
           await markWebhookEventProcessed(event, eventLinkage);
-          console.info(`[WEBHOOK] processed ok event_id=${event.id}, type=${event.type}`);
-          break;
+          return NextResponse.json({ received: true, ignored: "missing_request_id" });
         }
 
-        let shouldSendEmail = false;
-        let updatedRequest: PersistedRequest | null = null;
+        const amountTotal = session.amount_total;
+
+        const { data: existingRequest, error: existingRequestError } = await supabase
+          .from("written_requests")
+          .select(
+            "id, user_id, guest_email, question_1, question_2, question_3, status, paid, stripe_session_id, payment_intent_id, expected_amount_cents, calculator_snapshot, calculator_results"
+          )
+          .eq("id", writtenRequestId)
+          .maybeSingle();
+
+        if (existingRequestError) {
+          throw new Error(
+            `[WEBHOOK] request fetch error written_request_id=${writtenRequestId}: ${existingRequestError.message}`
+          );
+        }
+
+        if (!existingRequest) {
+          console.info("webhook_ignored_unknown_request", {
+            event_id: event.id,
+            type: event.type,
+            reason: "unknown_request_id",
+            request_id: writtenRequestId,
+          });
+          await markWebhookEventProcessed(event, eventLinkage);
+          return NextResponse.json({ received: true, ignored: "unknown_request_id" });
+        }
+
+        if (existingRequest.status !== "awaiting_payment" || existingRequest.paid === true) {
+          await markWebhookEventProcessed(event, eventLinkage);
+          return NextResponse.json({ received: true, ignored: "status_not_awaiting_payment" });
+        }
+
+        const expectedAmountCents = existingRequest.expected_amount_cents;
+
+        if (
+          expectedAmountCents === null ||
+          expectedAmountCents === undefined ||
+          amountTotal === null ||
+          amountTotal !== expectedAmountCents
+        ) {
+          console.info("webhook_amount_mismatch", {
+            event_id: event.id,
+            type: event.type,
+            request_id: writtenRequestId,
+            expected_amount_cents: expectedAmountCents ?? null,
+            amount_total: amountTotal ?? null,
+          });
+          await markWebhookEventProcessed(event, eventLinkage);
+          return NextResponse.json({ received: true, ignored: "amount_mismatch" });
+        }
+
+        if (existingRequest.stripe_session_id && existingRequest.stripe_session_id !== session.id) {
+          await markWebhookEventProcessed(event, eventLinkage);
+          return NextResponse.json({ received: true, ignored: "session_mismatch" });
+        }
+
+        if (
+          existingRequest.payment_intent_id &&
+          paymentIntentId &&
+          existingRequest.payment_intent_id !== paymentIntentId
+        ) {
+          await markWebhookEventProcessed(event, eventLinkage);
+          return NextResponse.json({ received: true, ignored: "payment_intent_mismatch" });
+        }
 
         const updateResult = await supabase
           .from("written_requests")
           .update({
+            paid: true,
+            paid_at: new Date().toISOString(),
             status: "paid",
             payment_intent_id: paymentIntentId,
           })
           .eq("id", writtenRequestId)
+          .eq("paid", false)
           .eq("status", "awaiting_payment")
-          .select("id, user_id, guest_email, question_1, question_2, question_3, calculator_snapshot, calculator_results")
+          .select("id, user_id, guest_email, question_1, question_2, question_3, status, paid, stripe_session_id, payment_intent_id, expected_amount_cents, calculator_snapshot, calculator_results")
           .maybeSingle();
 
         if (updateResult.error) {
           throw new Error(
             `[WEBHOOK] DB UPDATE ERROR written_request_id=${writtenRequestId}: ${updateResult.error.message}`
           );
-        } else if (updateResult.data) {
-          updatedRequest = updateResult.data as PersistedRequest;
-          shouldSendEmail = true;
         }
 
-        if (!updatedRequest) {
-          const { data: existingRequest } = await supabase
-            .from("written_requests")
-            .select("id, user_id, guest_email, question_1, question_2, question_3, calculator_snapshot, calculator_results")
-            .eq("id", writtenRequestId)
-            .maybeSingle();
-
-          if (existingRequest) {
-            updatedRequest = existingRequest as PersistedRequest;
-          }
+        if (!updateResult.data) {
+          await markWebhookEventProcessed(event, eventLinkage);
+          return NextResponse.json({ received: true, ignored: "no_state_transition" });
         }
 
-        if (!shouldSendEmail) {
-          break;
-        }
+        const updatedRequest = updateResult.data as PersistedRequest;
 
         const fallbackRequest: PersistedRequest = {
           id: writtenRequestId,
@@ -847,7 +912,10 @@ export async function POST(req: NextRequest) {
     }
 
     await markWebhookEventProcessed(event, eventLinkage);
-    console.info(`[WEBHOOK] processed ok event_id=${event.id}, type=${event.type}`);
+    console.info("webhook_processed_ok", {
+      event_id: event.id,
+      type: event.type,
+    });
 
     return NextResponse.json({ received: true });
   } catch (err) {
