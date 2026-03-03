@@ -57,7 +57,7 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
-        source: "/:path*",
+        source: "/:path((?!api/stripe/webhook).*)",
         has: [
           {
             type: "host",

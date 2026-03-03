@@ -74,6 +74,12 @@ type SendAdminEmailPayload = PersistedRequest & {
   snapshotSource?: "db" | "metadata";
 };
 
+type WebhookLinkage = {
+  requestId: string | null;
+  paymentIntentId: string | null;
+  sessionId: string | null;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -319,6 +325,96 @@ function formatBoolean(value: boolean | null) {
 function formatRoas(value: number | null) {
   if (value === null) return "—";
   return `${value.toFixed(2)}x`;
+}
+
+function shortErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.slice(0, 400);
+}
+
+function extractWebhookLinkage(event: Stripe.Event): WebhookLinkage {
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const requestId =
+      session.metadata?.written_request_id ??
+      (typeof session.client_reference_id === "string"
+        ? session.client_reference_id
+        : null);
+
+    return {
+      requestId,
+      paymentIntentId:
+        typeof session.payment_intent === "string" ? session.payment_intent : null,
+      sessionId: session.id,
+    };
+  }
+
+  if (event.type === "payment_intent.succeeded") {
+    const paymentIntent = event.data.object as Stripe.PaymentIntent;
+    return {
+      requestId: null,
+      paymentIntentId: paymentIntent.id,
+      sessionId: null,
+    };
+  }
+
+  return {
+    requestId: null,
+    paymentIntentId: null,
+    sessionId: null,
+  };
+}
+
+async function claimWebhookEvent(event: Stripe.Event, linkage: WebhookLinkage) {
+  const { error } = await supabase.from("stripe_webhook_events").insert({
+    event_id: event.id,
+    event_type: event.type,
+    status: "processing",
+    request_id: linkage.requestId,
+    payment_intent_id: linkage.paymentIntentId,
+    session_id: linkage.sessionId,
+  });
+
+  if (!error) {
+    return { claimed: true as const };
+  }
+
+  if (error.code === "23505") {
+    return { claimed: false as const };
+  }
+
+  throw new Error(`[WEBHOOK] failed to claim event ${event.id}: ${error.message}`);
+}
+
+async function markWebhookEventProcessed(event: Stripe.Event, linkage: WebhookLinkage) {
+  const { error } = await supabase
+    .from("stripe_webhook_events")
+    .update({
+      status: "processed",
+      processed_at: new Date().toISOString(),
+      request_id: linkage.requestId,
+      payment_intent_id: linkage.paymentIntentId,
+      session_id: linkage.sessionId,
+      error: null,
+    })
+    .eq("event_id", event.id);
+
+  if (error) {
+    throw new Error(`[WEBHOOK] failed to mark event processed ${event.id}: ${error.message}`);
+  }
+}
+
+async function markWebhookEventFailed(event: Stripe.Event, linkage: WebhookLinkage, error: unknown) {
+  await supabase
+    .from("stripe_webhook_events")
+    .update({
+      status: "failed",
+      request_id: linkage.requestId,
+      payment_intent_id: linkage.paymentIntentId,
+      session_id: linkage.sessionId,
+      error: shortErrorMessage(error),
+    })
+    .eq("event_id", event.id);
 }
 
 function buildTableRows(rows: Array<{ label: string; value: string }>) {
@@ -627,6 +723,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+  const eventLinkage = extractWebhookLinkage(event);
+
+  console.info(`[WEBHOOK] received event_id=${event.id}, type=${event.type}`);
+
+  try {
+    const claimResult = await claimWebhookEvent(event, eventLinkage);
+
+    if (!claimResult.claimed) {
+      console.info(`[WEBHOOK] duplicate event ignored event_id=${event.id}, type=${event.type}`);
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+  } catch (claimError) {
+    console.error("[WEBHOOK] event claim failed", {
+      eventId: event.id,
+      eventType: event.type,
+      error: shortErrorMessage(claimError),
+    });
+    return NextResponse.json({ received: false }, { status: 500 });
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -646,11 +762,12 @@ export async function POST(req: NextRequest) {
             stripeSessionId: session.id,
             paymentIntentId,
           });
+          await markWebhookEventProcessed(event, eventLinkage);
+          console.info(`[WEBHOOK] processed ok event_id=${event.id}, type=${event.type}`);
           break;
         }
 
         let shouldSendEmail = false;
-        let updateErrorMessage: string | null = null;
         let updatedRequest: PersistedRequest | null = null;
 
         const updateResult = await supabase
@@ -665,13 +782,9 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
 
         if (updateResult.error) {
-          updateErrorMessage = updateResult.error.message;
-          shouldSendEmail = true;
-          console.error("[WEBHOOK] DB UPDATE ERROR", {
-            writtenRequestId,
-            paymentIntentId,
-            error: updateResult.error.message,
-          });
+          throw new Error(
+            `[WEBHOOK] DB UPDATE ERROR written_request_id=${writtenRequestId}: ${updateResult.error.message}`
+          );
         } else if (updateResult.data) {
           updatedRequest = updateResult.data as PersistedRequest;
           shouldSendEmail = true;
@@ -726,13 +839,6 @@ export async function POST(req: NextRequest) {
           snapshotSource: hasDbSnapshot ? "db" : "metadata",
         });
 
-        if (updateErrorMessage) {
-          console.error("[WEBHOOK] Email sent with metadata fallback due to DB error", {
-            writtenRequestId,
-            error: updateErrorMessage,
-          });
-        }
-
         break;
       }
 
@@ -740,9 +846,17 @@ export async function POST(req: NextRequest) {
         break;
     }
 
+    await markWebhookEventProcessed(event, eventLinkage);
+    console.info(`[WEBHOOK] processed ok event_id=${event.id}, type=${event.type}`);
+
     return NextResponse.json({ received: true });
   } catch (err) {
-    console.error("❌ Webhook processing failed:", err);
-    return NextResponse.json({ received: true });
+    await markWebhookEventFailed(event, eventLinkage, err);
+    console.error("❌ Webhook processing failed:", {
+      eventId: event.id,
+      eventType: event.type,
+      error: shortErrorMessage(err),
+    });
+    return NextResponse.json({ received: false }, { status: 500 });
   }
 }
