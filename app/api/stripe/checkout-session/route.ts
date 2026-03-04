@@ -203,14 +203,35 @@ export async function POST(request: Request) {
     };
 
     let writtenRequestId = requestId;
+    const isUpdatingExistingRequest = Boolean(writtenRequestId);
 
     if (writtenRequestId) {
+      if (!authenticatedUser?.id) {
+        return new Response("Forbidden", { status: 403 });
+      }
+
+      const { data: writtenRequest, error: writtenRequestFetchError } = await supabase
+        .from("written_requests")
+        .select("id, user_id")
+        .eq("id", writtenRequestId)
+        .eq("user_id", authenticatedUser.id)
+        .single();
+
+      if (
+        writtenRequestFetchError ||
+        !writtenRequest ||
+        writtenRequest.user_id !== authenticatedUser.id
+      ) {
+        return new Response("Forbidden", { status: 403 });
+      }
+
       const { data: updatedRequest, error: writtenRequestUpdateError } = await supabase
         .from("written_requests")
         .update(checkoutPayload)
         .eq("id", writtenRequestId)
+        .eq("user_id", authenticatedUser.id)
         .select("id")
-        .maybeSingle();
+        .single();
 
       if (writtenRequestUpdateError || !updatedRequest) {
         console.error("written_requests update failed", writtenRequestUpdateError);
@@ -276,12 +297,18 @@ export async function POST(request: Request) {
       cancel_url: `${baseUrl}/written-breakdown?cancelled=1&request_id=${writtenRequestId}`,
     });
 
-    const { error: writtenRequestUpdateError } = await supabase
+    let stripeSessionUpdateQuery = supabase
       .from("written_requests")
       .update({
         stripe_session_id: session.id,
       })
       .eq("id", writtenRequestId);
+
+    if (isUpdatingExistingRequest && authenticatedUser?.id) {
+      stripeSessionUpdateQuery = stripeSessionUpdateQuery.eq("user_id", authenticatedUser.id);
+    }
+
+    const { error: writtenRequestUpdateError } = await stripeSessionUpdateQuery;
 
     if (writtenRequestUpdateError) {
       console.error("Failed to persist stripe session id", writtenRequestUpdateError);
