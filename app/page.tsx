@@ -4,11 +4,11 @@ import CalculatorCard from "./components/CalculatorCard";
 import { buildCalculatorMetadata } from "./lib/seo";
 
 export const metadata: Metadata = buildCalculatorMetadata({
-  title: "UK Profit Calculator for Ecommerce — real profit after VAT & ads",
+  title: "UK Profit Calculator — Real Profit After VAT, Ads & Costs",
   description:
-    "Calculate real UK ecommerce profit after 20% VAT, ad spend and fixed costs. Built for Shopify, Amazon and UK small businesses. No spreadsheets, no guesswork.",
+    "Free UK e-commerce profit calculator. Estimate real profit after VAT, advertising costs, shipping, and fees. Built for UK businesses and self-employed sellers.",
   canonicalPath: "/",
-  appName: "UK E-commerce Profit Calculator",
+  appName: "UK Profit Calculator",
 });
 
 export default function HomePage() {

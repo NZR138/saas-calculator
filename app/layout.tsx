@@ -10,10 +10,10 @@ const SITE_URL =
   'https://ukprofit.co.uk';
 
 const DEFAULT_TITLE =
-  'UK Profit Calculator for Ecommerce — real profit after VAT & ads';
+  'UK Profit Calculator — Real Profit After VAT, Ads & Costs';
 
 const DEFAULT_DESCRIPTION =
-  'Calculate real UK ecommerce profit after 20% VAT, ad spend and fixed costs. Built for Shopify, Amazon and UK small businesses. No spreadsheets, no guesswork.';
+  'Free UK e-commerce profit calculator. Estimate real profit after VAT, advertising costs, shipping, and fees. Built for UK businesses and self-employed sellers.';
 
 const organizationJsonLd = {
   '@context': 'https://schema.org',
@@ -59,8 +59,8 @@ export const metadata: Metadata = {
     apple: '/apple-touch-icon.png',
   },
   openGraph: {
-    title: DEFAULT_TITLE,
-    description: DEFAULT_DESCRIPTION,
+    title: 'UK Profit Calculator',
+    description: 'Free UK e-commerce profit calculator. Estimate real profit after VAT and costs.',
     type: 'website',
     url: SITE_URL,
   },
