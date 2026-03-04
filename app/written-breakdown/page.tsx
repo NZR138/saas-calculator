@@ -330,12 +330,34 @@ function WrittenBreakdownContent() {
         </section>
 
         <section className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">Important note</h3>
-          <p className="text-sm text-gray-700 leading-relaxed">
-            This is a general, educational breakdown based on the information provided.
-            It is not financial or tax advice.
-            For personalised advice, please speak to a qualified UK accountant or tax advisor.
-          </p>
+          <h3 className="text-sm font-semibold text-gray-900 mb-2">Important Notice</h3>
+          <div className="space-y-2 text-sm text-gray-700 leading-relaxed">
+            <p>
+              UK Profit Calculator is an independent digital tool providing automated financial
+              estimates and scenario breakdowns for informational and educational purposes only.
+            </p>
+            <p>
+              We are not a regulated financial adviser, accountant, or tax professional, and no
+              content on this website constitutes regulated financial or tax advice under UK law.
+            </p>
+            <p>
+              Calculations and written analyses are based on publicly available UK tax
+              information, including HMRC guidance and UK government tax publications.
+            </p>
+            <p>
+              All estimates are simplified calculations and may not reflect individual
+              circumstances, tax reliefs, accounting schemes, or specific regulatory
+              considerations.
+            </p>
+            <p>
+              Users remain fully responsible for their own financial decisions, VAT submissions,
+              tax filings, and business compliance.
+            </p>
+            <p>
+              Users should verify all conclusions with a qualified UK accountant before
+              submitting tax returns or VAT filings.
+            </p>
+          </div>
         </section>
 
         <section className="mb-8">
@@ -347,9 +369,24 @@ function WrittenBreakdownContent() {
               className="mt-1"
             />
             <span className="text-sm text-gray-700">
-              I understand this is an educational breakdown and not financial or tax advice.
+              I understand this is an educational financial analysis based on the information I
+              provided and does not constitute financial or tax advice.
             </span>
           </label>
+          <p className="mt-2 text-xs text-gray-500">
+            The accuracy of this analysis depends entirely on the accuracy of the information
+            provided by the user.
+          </p>
+        </section>
+
+        <section className="mb-6">
+          <p className="text-xs text-gray-600">
+            This payment provides a written financial scenario analysis based solely on the
+            information you provide.
+          </p>
+          <p className="mt-1 text-[11px] text-gray-500">
+            This is not a subscription and no recurring payments will be charged.
+          </p>
         </section>
 
         <section className="flex gap-3">
