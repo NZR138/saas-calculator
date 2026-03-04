@@ -29,6 +29,23 @@ type CheckoutRequestBody = {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const WRITTEN_BREAKDOWN_AMOUNT_CENTS = 3900;
+const ALLOWED_HOST_PATTERN = /^(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|ukprofit\.co\.uk|www\.ukprofit\.co\.uk|[a-z0-9-]+\.vercel\.app)$/i;
+
+function isAllowedHost(host: string | null) {
+  if (!host) return true;
+  return ALLOWED_HOST_PATTERN.test(host.trim());
+}
+
+function isAllowedOrigin(origin: string | null) {
+  if (!origin) return true;
+
+  try {
+    const parsed = new URL(origin);
+    return isAllowedHost(parsed.host);
+  } catch {
+    return false;
+  }
+}
 
 function parseBearerToken(headerValue: string | null) {
   if (!headerValue) return undefined;
@@ -44,8 +61,30 @@ function sanitizeQuestion(value: unknown) {
   return value.trim();
 }
 
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      Allow: "POST, OPTIONS",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   try {
+    const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+    const origin = request.headers.get("origin");
+
+    if (!isAllowedHost(host) || !isAllowedOrigin(origin)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+
+    if (!contentType.includes("application/json")) {
+      return NextResponse.json({ error: "Unsupported Media Type" }, { status: 415 });
+    }
+
     const stripe = getStripe();
 
     const rateLimitResult = checkRateLimit(request, {

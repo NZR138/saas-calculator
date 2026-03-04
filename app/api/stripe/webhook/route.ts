@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { assertCriticalEnvInDevelopment } from "@/app/lib/envValidation";
+import { checkRateLimit } from "@/app/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -422,6 +423,15 @@ async function markWebhookEventFailed(event: Stripe.Event, linkage: WebhookLinka
     .eq("event_id", event.id);
 }
 
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      Allow: "POST, OPTIONS",
+    },
+  });
+}
+
 function buildTableRows(rows: Array<{ label: string; value: string }>) {
   return rows
     .map(
@@ -711,6 +721,33 @@ async function sendAdminEmail(request: SendAdminEmailPayload) {
 
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
+
+  const rateLimitResult = checkRateLimit(req, {
+    keyPrefix: "stripe-webhook-soft",
+    limit: 2000,
+    windowMs: 60_000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    console.warn("webhook_soft_rate_limited", {
+      retry_after_seconds: Math.ceil(rateLimitResult.retryAfterMs / 1000),
+    });
+
+    return NextResponse.json(
+      { received: false, rate_limited: true },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(rateLimitResult.retryAfterMs / 1000)),
+        },
+      }
+    );
+  }
+
+  const contentType = req.headers.get("content-type")?.toLowerCase() ?? "";
+  if (contentType && !contentType.includes("application/json")) {
+    return NextResponse.json({ error: "Unsupported Media Type" }, { status: 415 });
+  }
 
   const body = await req.text();
   const signature = req.headers.get("stripe-signature") as string;

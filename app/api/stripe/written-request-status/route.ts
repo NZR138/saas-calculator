@@ -4,8 +4,42 @@ import { checkRateLimit } from "@/app/lib/rateLimit";
 
 export const runtime = "nodejs";
 
+const ALLOWED_HOST_PATTERN = /^(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|ukprofit\.co\.uk|www\.ukprofit\.co\.uk|[a-z0-9-]+\.vercel\.app)$/i;
+
+function isAllowedHost(host: string | null) {
+  if (!host) return true;
+  return ALLOWED_HOST_PATTERN.test(host.trim());
+}
+
+function isAllowedOrigin(origin: string | null) {
+  if (!origin) return true;
+
+  try {
+    const parsed = new URL(origin);
+    return isAllowedHost(parsed.host);
+  } catch {
+    return false;
+  }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      Allow: "GET, OPTIONS",
+    },
+  });
+}
+
 export async function GET(request: Request) {
   try {
+    const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+    const origin = request.headers.get("origin");
+
+    if (!isAllowedHost(host) || !isAllowedOrigin(origin)) {
+      return NextResponse.json({ paid: false, status: "awaiting_payment" }, { status: 403 });
+    }
+
     const rateLimitResult = checkRateLimit(request, {
       keyPrefix: "written-request-status",
       limit: 60,
