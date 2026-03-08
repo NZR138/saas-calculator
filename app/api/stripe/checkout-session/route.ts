@@ -28,7 +28,7 @@ type CheckoutRequestBody = {
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const WRITTEN_BREAKDOWN_AMOUNT_CENTS = 3900;
+const WRITTEN_BREAKDOWN_AMOUNT_CENTS = 1900;
 const ALLOWED_HOST_PATTERN = /^(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|ukprofit\.co\.uk|www\.ukprofit\.co\.uk|[a-z0-9-]+\.vercel\.app)$/i;
 
 function isAllowedHost(host: string | null) {

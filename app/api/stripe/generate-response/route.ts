@@ -45,6 +45,13 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
+function markdownToHtml(markdown: string) {
+  return escapeHtml(markdown)
+    .replace(/^###\s+(.+)$/gm, "<h3>$1</h3>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\r?\n/g, "<br/>");
+}
+
 function buildPrompt(record: WrittenRequestRecord) {
   const payload = {
     question_1: record.question_1,
@@ -147,7 +154,7 @@ async function sendCustomerEmail(recipientEmail: string, requestId: string, aiRe
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   const escapedRequestId = escapeHtml(requestId);
-  const escapedAiResponse = escapeHtml(aiResponse).replaceAll("\n", "<br/>");
+  const formattedAiResponseHtml = markdownToHtml(aiResponse);
   const renderedAt = new Date().toISOString();
 
   const sendResult = await resend.emails.send({
@@ -171,7 +178,7 @@ async function sendCustomerEmail(recipientEmail: string, requestId: string, aiRe
                   <div style="font-size:12px;color:#6b7280;padding-bottom:6px;">Request ID</div>
                   <div style="font-size:14px;color:#111827;font-weight:600;padding-bottom:16px;word-break:break-all;">${escapedRequestId}</div>
                   <div style="font-size:14px;color:#111827;font-weight:700;padding-bottom:10px;">AI Response</div>
-                  <div style="font-size:14px;line-height:22px;color:#111827;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">${escapedAiResponse}</div>
+                  <div style="font-size:14px;line-height:22px;color:#111827;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">${formattedAiResponseHtml}</div>
                 </td>
               </tr>
               <tr>

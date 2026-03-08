@@ -293,6 +293,10 @@ function WrittenBreakdownContent() {
 
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Your questions</h2>
+          <p className="text-sm text-gray-600 mb-3">
+            Your calculator data is automatically included in your analysis. Use these questions
+            to ask anything specific about your UK tax or profit situation.
+          </p>
           <p className="text-gray-600 text-sm mb-4">
             You can ask up to 3 questions. Each question can be up to 200 characters.
             Short, specific questions work best.
@@ -356,7 +360,7 @@ function WrittenBreakdownContent() {
         <section className="mb-8">
           <p className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <span className="text-red-600 line-through">£39</span>
-            <span className="text-green-600">FREE — Limited Time Offer</span>
+            <span className="text-green-600">£19 — Limited Time Offer</span>
           </p>
         </section>
 
@@ -430,7 +434,7 @@ function WrittenBreakdownContent() {
                 : "bg-gray-300 cursor-not-allowed"
             }`}
           >
-            {isProcessing ? "Processing…" : "Get My Free AI Analysis"}
+            {isProcessing ? "Processing…" : "Get My AI Analysis — £19"}
           </button>
           <button
             onClick={() => router.push("/")}
@@ -441,7 +445,7 @@ function WrittenBreakdownContent() {
         </section>
 
         <p className="mt-2 text-xs text-gray-500">
-          No payment required · Instant AI response · UK tax data only
+          One-off payment · Instant AI response · UK tax data only
         </p>
 
         {isPaid && (
