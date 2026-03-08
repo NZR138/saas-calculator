@@ -423,6 +423,25 @@ async function markWebhookEventFailed(event: Stripe.Event, linkage: WebhookLinka
     .eq("event_id", event.id);
 }
 
+async function triggerGenerateResponse(request: NextRequest, requestId: string) {
+  const origin = new URL(request.url).origin;
+
+  const response = await fetch(`${origin}/api/stripe/generate-response`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ request_id: requestId }),
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text();
+    throw new Error(
+      `generate-response failed for request_id=${requestId}: ${response.status} ${bodyText.slice(0, 200)}`
+    );
+  }
+}
+
 export async function OPTIONS() {
   return new Response(null, {
     status: 204,
@@ -940,6 +959,15 @@ export async function POST(req: NextRequest) {
           metadata: session.metadata ?? null,
           snapshotSource: hasDbSnapshot ? "db" : "metadata",
         });
+
+        try {
+          await triggerGenerateResponse(req, writtenRequestId);
+        } catch (generateError) {
+          console.error("[WEBHOOK] generate-response trigger failed", {
+            requestId: writtenRequestId,
+            error: shortErrorMessage(generateError),
+          });
+        }
 
         break;
       }

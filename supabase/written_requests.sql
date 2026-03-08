@@ -21,6 +21,8 @@ alter table public.written_requests
   add column if not exists stripe_session_id text null,
   add column if not exists stripe_payment_intent_id text null,
   add column if not exists paid boolean not null default false,
+  add column if not exists ai_response text null,
+  add column if not exists ai_sent_at timestamptz null,
   alter column created_at set default now(),
   alter column status set default 'awaiting_payment';
 

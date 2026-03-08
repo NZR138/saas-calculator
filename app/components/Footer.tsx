@@ -18,6 +18,10 @@ export default function Footer() {
             Disclaimer
           </Link>
         </p>
+        <p className="mt-2 text-xs text-gray-500">
+          Educational financial calculator based on publicly available HMRC guidance. Not
+          financial or tax advice.
+        </p>
       </div>
     </footer>
   );

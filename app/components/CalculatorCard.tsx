@@ -173,6 +173,22 @@ export default function CalculatorCard({
           <ModeResults currentMode={mode} resultsByMode={resultsByMode} />
         )}
 
+        <section className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+          <h3 className="font-semibold text-gray-900">How Calculations Work</h3>
+          <p className="mt-2">This calculator uses publicly available UK tax information including:</p>
+          <ul className="mt-2 space-y-1 text-gray-700">
+            <li>• Standard UK VAT rates</li>
+            <li>• Income tax thresholds</li>
+            <li>• National Insurance contribution bands</li>
+            <li>• Generalised e-commerce cost assumptions</li>
+          </ul>
+          <p className="mt-3">
+            The tool does not account for individual tax circumstances, reliefs, special
+            accounting schemes, or complex company structures unless explicitly selected by the
+            user.
+          </p>
+        </section>
+
         <details className="mt-4 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
           <summary className="cursor-pointer font-medium text-gray-900">
             How this calculator works

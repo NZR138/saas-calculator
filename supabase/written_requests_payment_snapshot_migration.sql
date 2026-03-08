@@ -2,6 +2,8 @@ alter table public.written_requests
   add column if not exists payment_intent_id text null,
   add column if not exists calculator_snapshot jsonb null,
   add column if not exists calculator_results jsonb null,
+  add column if not exists ai_response text null,
+  add column if not exists ai_sent_at timestamptz null,
   add column if not exists paid_at timestamptz null,
   add column if not exists stripe_session_id text null,
   add column if not exists guest_email text null,
