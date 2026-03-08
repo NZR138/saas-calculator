@@ -9,6 +9,7 @@ type GenerateResponseBody = {
 
 type WrittenRequestRecord = {
   id: string;
+  status: string | null;
   paid: boolean;
   ai_sent_at: string | null;
   ai_response: string | null;
@@ -222,7 +223,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("written_requests")
       .select(
-        "id, paid, ai_sent_at, ai_response, user_id, guest_email, question_1, question_2, question_3, calculator_snapshot, calculator_results"
+        "id, status, paid, ai_sent_at, ai_response, user_id, guest_email, question_1, question_2, question_3, calculator_snapshot, calculator_results"
       )
       .eq("id", requestId)
       .maybeSingle();
@@ -236,8 +237,9 @@ export async function POST(request: Request) {
     }
 
     const record = data as WrittenRequestRecord;
+    const isFreeRequest = record.status === "free";
 
-    if (!record.paid && !isLocalTestBypass) {
+    if (!record.paid && !isFreeRequest && !isLocalTestBypass) {
       return NextResponse.json({ ok: true, ignored: "not_paid" });
     }
 
@@ -257,11 +259,15 @@ export async function POST(request: Request) {
       .is("ai_sent_at", null);
 
     if (!isLocalTestBypass) {
-      updateQuery = updateQuery.eq("paid", true);
+      if (isFreeRequest) {
+        updateQuery = updateQuery.eq("status", "free").eq("paid", false);
+      } else {
+        updateQuery = updateQuery.eq("paid", true);
+      }
     }
 
     const { data: updatedRecord, error: updateError } = await updateQuery
-      .select("id, paid, ai_sent_at, ai_response, user_id, guest_email, question_1, question_2, question_3, calculator_snapshot, calculator_results")
+      .select("id, status, paid, ai_sent_at, ai_response, user_id, guest_email, question_1, question_2, question_3, calculator_snapshot, calculator_results")
       .maybeSingle();
 
     if (updateError) {

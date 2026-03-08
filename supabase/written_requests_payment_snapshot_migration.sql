@@ -23,6 +23,6 @@ begin
   ) then
     alter table public.written_requests
       add constraint written_requests_status_check
-      check (status in ('draft', 'awaiting_payment', 'paid'));
+      check (status in ('draft', 'free', 'awaiting_payment', 'paid'));
   end if;
 end $$;

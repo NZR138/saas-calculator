@@ -209,7 +209,7 @@ function WrittenBreakdownContent() {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
-          mode: "draft",
+          mode: "free",
           requestId: existingRequestId,
           guestEmail: effectiveEmail,
           questions: trimmedQuestions,
@@ -345,22 +345,22 @@ function WrittenBreakdownContent() {
           <ul className="space-y-2 text-gray-700">
             <li className="flex items-start gap-3">
               <span className="text-lg text-black mt-0">•</span>
-              <span>Written response by email</span>
+              <span>AI-generated analysis sent to your email</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="text-lg text-black mt-0">•</span>
-              <span>Typically within 24–48 hours</span>
+              <span>Delivered instantly — within minutes</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="text-lg text-black mt-0">•</span>
-              <span>No calls included</span>
+              <span>Based on your calculator data + your questions</span>
             </li>
           </ul>
         </section>
         <section className="mb-8">
           <p className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <span className="text-red-600 line-through">£39</span>
-            <span className="text-green-600">£19 — Limited Time Offer</span>
+            <span className="text-red-600 line-through font-bold">£19</span>
+            <span className="text-green-600 font-bold">FREE — Limited Time</span>
           </p>
         </section>
 
@@ -414,16 +414,6 @@ function WrittenBreakdownContent() {
           </p>
         </section>
 
-        <section className="mb-6">
-          <p className="text-xs text-gray-600">
-            This payment provides a written financial scenario analysis based solely on the
-            information you provide.
-          </p>
-          <p className="mt-1 text-[11px] text-gray-500">
-            This is not a subscription and no recurring payments will be charged.
-          </p>
-        </section>
-
         <section className="flex gap-3">
           <button
             onClick={handleCheckout}
@@ -434,7 +424,7 @@ function WrittenBreakdownContent() {
                 : "bg-gray-300 cursor-not-allowed"
             }`}
           >
-            {isProcessing ? "Processing…" : "Get My AI Analysis — £19"}
+            {isProcessing ? "Processing…" : "Get My Free AI Analysis →"}
           </button>
           <button
             onClick={() => router.push("/")}
@@ -445,7 +435,7 @@ function WrittenBreakdownContent() {
         </section>
 
         <p className="mt-2 text-xs text-gray-500">
-          One-off payment · Instant AI response · UK tax data only
+          No payment required · Instant AI response · UK tax data only
         </p>
 
         {isPaid && (

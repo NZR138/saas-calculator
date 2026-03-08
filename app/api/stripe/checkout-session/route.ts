@@ -19,7 +19,7 @@ function getStripe() {
 }
 
 type CheckoutRequestBody = {
-  mode?: "draft" | "checkout";
+  mode?: "draft" | "free" | "checkout";
   requestId?: string;
   guestEmail?: string;
   questions?: string[];
@@ -85,8 +85,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unsupported Media Type" }, { status: 415 });
     }
 
-    const stripe = getStripe();
-
     const rateLimitResult = checkRateLimit(request, {
       keyPrefix: "checkout-session",
       limit: 20,
@@ -108,7 +106,8 @@ export async function POST(request: Request) {
     const requestOrigin = new URL(request.url).origin;
 
     const body = (await request.json()) as CheckoutRequestBody;
-    const mode = body.mode === "draft" ? "draft" : "checkout";
+    const mode =
+      body.mode === "draft" || body.mode === "free" ? body.mode : "checkout";
     const requestId = body.requestId?.trim();
     const questions = Array.isArray(body.questions) ? body.questions : [];
     const calculatorSnapshot =
@@ -126,14 +125,16 @@ export async function POST(request: Request) {
 
     const supabase = getSupabaseAdminClient();
 
-    if (mode === "draft") {
+    if (mode === "draft" || mode === "free") {
+      const requestStatus = mode === "free" ? "free" : "draft";
+
       const draftPayload = {
         user_id: null as string | null,
         guest_email: null as string | null,
         question_1: question1,
         question_2: question2,
         question_3: question3,
-        status: "draft" as const,
+        status: requestStatus,
         paid: false,
         calculator_snapshot: calculatorSnapshot,
         calculator_results: calculatorResults,
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
           );
         }
 
-        return NextResponse.json({ requestId: updatedDraft.id, status: "draft" });
+        return NextResponse.json({ requestId: updatedDraft.id, status: requestStatus });
       }
 
       const { data: createdDraft, error: draftCreateError } = await supabase
@@ -187,8 +188,10 @@ export async function POST(request: Request) {
         );
       }
 
-      return NextResponse.json({ requestId: createdDraft.id, status: "draft" });
+      return NextResponse.json({ requestId: createdDraft.id, status: requestStatus });
     }
+
+    const stripe = getStripe();
 
     if (questions.length !== 3) {
       return NextResponse.json(
