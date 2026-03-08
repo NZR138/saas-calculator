@@ -149,7 +149,7 @@ function WrittenBreakdownContent() {
 
     const effectiveEmail = isLoggedIn ? userEmail : guestEmail.trim();
     if (!isEmailValid(effectiveEmail)) {
-      setErrorMessage("Please enter a valid email before payment.");
+      setErrorMessage("Please enter a valid email before continuing.");
       return;
     }
 
@@ -200,13 +200,17 @@ function WrittenBreakdownContent() {
 
       const calculatorResults = calculatorSnapshot.results;
 
-      const response = await fetch("/api/stripe/checkout-session", {
+      const existingRequestId = searchParams.get("request_id")?.trim() || undefined;
+
+      const draftResponse = await fetch("/api/stripe/checkout-session", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
+          mode: "draft",
+          requestId: existingRequestId,
           guestEmail: effectiveEmail,
           questions: trimmedQuestions,
           calculatorSnapshot,
@@ -214,16 +218,42 @@ function WrittenBreakdownContent() {
         }),
       });
 
-      const result = (await response.json()) as { url?: string; error?: string };
+      const draftResult = (await draftResponse.json()) as {
+        requestId?: string;
+        error?: string;
+      };
 
-      if (!response.ok || !result.url) {
-        setErrorMessage(result.error || "Unable to start checkout.");
+      if (!draftResponse.ok || !draftResult.requestId) {
+        setErrorMessage(draftResult.error || "Unable to prepare your request.");
         return;
       }
 
-      window.location.assign(result.url);
+      const generateResponse = await fetch("/api/stripe/generate-response", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          request_id: draftResult.requestId,
+          test_mode: false,
+        }),
+      });
+
+      const generateResult = (await generateResponse.json()) as {
+        ok?: boolean;
+        ignored?: string;
+        error?: string;
+      };
+
+      if (!generateResponse.ok || !generateResult.ok) {
+        setErrorMessage(generateResult.error || "Unable to generate your AI analysis.");
+        return;
+      }
+
+      setIsPaid(true);
+
     } catch {
-      setErrorMessage("Unable to start checkout.");
+      setErrorMessage("Unable to generate your AI analysis.");
     } finally {
       setIsProcessing(false);
     }
@@ -324,8 +354,9 @@ function WrittenBreakdownContent() {
           </ul>
         </section>
         <section className="mb-8">
-          <p className="text-lg font-semibold text-gray-900">
-            £39 — one-off payment. No subscription.
+          <p className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <span className="text-red-600 line-through">£39</span>
+            <span className="text-green-600">FREE — Limited Time Offer</span>
           </p>
         </section>
 
@@ -395,11 +426,11 @@ function WrittenBreakdownContent() {
             disabled={!agreedToTerms}
             className={`flex-1 rounded-md px-4 py-3 font-medium text-white transition ${
               agreedToTerms
-                ? "bg-black hover:bg-gray-900 cursor-pointer"
+                ? "bg-green-600 hover:bg-green-700 cursor-pointer"
                 : "bg-gray-300 cursor-not-allowed"
             }`}
           >
-            {isProcessing ? "Processing…" : "Get my written breakdown (£39)"}
+            {isProcessing ? "Processing…" : "Get My Free AI Analysis"}
           </button>
           <button
             onClick={() => router.push("/")}
@@ -409,9 +440,13 @@ function WrittenBreakdownContent() {
           </button>
         </section>
 
+        <p className="mt-2 text-xs text-gray-500">
+          No payment required · Instant AI response · UK tax data only
+        </p>
+
         {isPaid && (
           <p className="mt-4 text-sm text-green-700">
-            Payment was submitted. We&apos;ll confirm and process your written breakdown shortly.
+            Your AI analysis was generated and sent by email.
           </p>
         )}
         {isCancelled && !isPaid && (

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Written Breakdown | UK Profit Calculator",
+  title: "Free UK Business Tax Analysis — AI Written Breakdown",
   description:
-    "Request a written educational profit and tax breakdown based on your calculator figures.",
+    "Get a free AI-powered profit and tax analysis for your UK business. Based on HMRC data. Instant delivery.",
   alternates: {
     canonical: "/written-breakdown",
   },
